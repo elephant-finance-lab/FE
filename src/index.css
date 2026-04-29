@@ -1,0 +1,150 @@
+@import "tailwindcss";
+
+@theme {
+  --color-toss-blue: #3182F6;
+  --color-toss-blue-light: #E8F3FF;
+  --color-toss-blue-dark: #2272EB;
+  --color-toss-red: #FF3B30;
+  --color-toss-green: #34C759;
+  --color-error: #FF3B30;
+  --color-bg: #F5F5F5;
+  --color-card: #FFFFFF;
+  --color-gray-50: #FAFAFA;
+  --color-gray-100: #F5F5F5;
+  --color-gray-200: #EEEEEE;
+  --color-gray-300: #E0E0E0;
+  --color-gray-400: #BDBDBD;
+  --color-gray-500: #9E9E9E;
+  --color-gray-600: #757575;
+  --color-gray-700: #616161;
+  --color-gray-800: #424242;
+  --color-gray-900: #191F28;
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+}
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+html {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #F5F5F5;
+  height: 100%;
+}
+
+body {
+  width: 100%;
+  max-width: 393px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  background-color: #FFFFFF;
+  color: #191F28;
+  position: relative;
+  overflow-x: hidden;
+  font-size: 15px;
+  line-height: 1.5;
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.06);
+}
+
+#root {
+  width: 100%;
+  min-height: 100dvh;
+}
+
+input, button, textarea, select {
+  font-family: inherit;
+  outline: none;
+}
+
+::-webkit-scrollbar {
+  display: none;
+}
+
+@layer components {
+  .screen {
+    @apply min-h-dvh w-full bg-white;
+  }
+
+  .screen-px {
+    @apply px-6;
+  }
+
+  .screen-header {
+    @apply px-6 pt-7 pb-5;
+  }
+
+  .page-title {
+    @apply text-[15px] font-medium leading-6 text-gray-900;
+  }
+
+  .section-title {
+    @apply text-[24px] font-semibold leading-[1.3] tracking-[-0.01em] text-gray-900;
+  }
+
+  .body-copy {
+    @apply text-[14px] font-normal leading-[1.55] text-gray-500;
+  }
+
+  .field-label {
+    @apply mb-2 block text-[13px] font-medium leading-5 text-gray-700;
+  }
+
+  .field-input {
+    @apply h-[52px] w-full rounded-[14px] border border-gray-200 bg-gray-50 px-4 text-[15px] leading-6 text-gray-900 placeholder:text-gray-400 transition-colors focus:border-toss-blue focus:bg-white;
+  }
+
+  .chip {
+    @apply inline-flex h-[30px] items-center rounded-[7px] px-3 text-[13px] font-normal leading-none transition-colors;
+  }
+
+  .chip-active {
+    @apply bg-gray-200/70 text-gray-900;
+  }
+
+  .chip-inactive {
+    @apply bg-white text-gray-700 border border-gray-200;
+  }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.4s ease-out;
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 2s ease-in-out infinite;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
