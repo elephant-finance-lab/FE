@@ -24,6 +24,11 @@ export interface RegisterUserInfoRequest {
   gender: Gender
 }
 
+export interface UpdateUserProfileRequest {
+  name: string
+  phone: string
+}
+
 export interface UserIdResponse {
   userId: number
 }
@@ -63,6 +68,13 @@ export function getMyProfile() {
 export function registerUserInfo(payload: RegisterUserInfoRequest) {
   return apiRequest<UserIdResponse>('/api/users/me', {
     method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateUserProfile(payload: UpdateUserProfileRequest) {
+  return apiRequest<void>('/api/users/me', {
+    method: 'PATCH',
     body: JSON.stringify(payload),
   })
 }
