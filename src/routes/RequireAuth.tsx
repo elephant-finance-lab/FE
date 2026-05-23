@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
+import { getMyTerms, hasAgreedAllTerms } from '../apis/auth'
 import { useAuth } from '../contexts/useAuth'
 
 function AuthLoadingScreen() {
@@ -11,39 +12,36 @@ function AuthLoadingScreen() {
   )
 }
 
-function ResetIncompleteAuth() {
-  const navigate = useNavigate()
-  const { logout } = useAuth()
-  const didResetRef = useRef(false)
+function IncompleteProfileRedirect() {
+  const [nextPath, setNextPath] = useState<string | null>(null)
 
   useEffect(() => {
-    if (didResetRef.current) return
+    let isMounted = true
 
-    didResetRef.current = true
-    void logout().finally(() => {
-      navigate('/login', { replace: true })
-    })
-  }, [logout, navigate])
+    getMyTerms()
+      .then((terms) => {
+        if (!isMounted) return
+        setNextPath(hasAgreedAllTerms(terms) ? '/basic-info' : '/agreement')
+      })
+      .catch(() => {
+        if (!isMounted) return
+        setNextPath('/agreement')
+      })
 
-  return (
-    <div className="screen flex items-center justify-center px-6">
-      <p className="body-copy">가입을 다시 시작해주세요.</p>
-    </div>
-  )
-}
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
-export function RejectIncompleteAuth({ children }: { children: ReactNode }) {
-  const { isAuthenticated, isLoading, isProfileComplete } = useAuth()
-
-  if (isLoading) {
-    return <AuthLoadingScreen />
+  if (!nextPath) {
+    return (
+      <div className="screen flex items-center justify-center px-6">
+        <p className="body-copy">가입 상태를 확인하고 있어요.</p>
+      </div>
+    )
   }
 
-  if (isAuthenticated && !isProfileComplete) {
-    return <ResetIncompleteAuth />
-  }
-
-  return children
+  return <Navigate to={nextPath} replace />
 }
 
 interface RequireAuthProps {
@@ -64,7 +62,7 @@ export default function RequireAuth({ children, requireProfileComplete = false }
   }
 
   if (requireProfileComplete && !isProfileComplete) {
-    return <ResetIncompleteAuth />
+    return <IncompleteProfileRedirect />
   }
 
   return children
