@@ -26,10 +26,14 @@ import TradeConfirmPage from './pages/trade/TradeConfirmPage'
 import TradeCompletePage from './pages/trade/TradeCompletePage'
 import NotificationPage from './pages/notification/NotificationPage'
 import { AuthProvider } from './contexts/AuthProvider'
-import RequireAuth from './routes/RequireAuth'
+import RequireAuth, { RejectIncompleteAuth } from './routes/RequireAuth'
 
 function protectedElement(element: ReactNode, requireProfileComplete = true) {
   return <RequireAuth requireProfileComplete={requireProfileComplete}>{element}</RequireAuth>
+}
+
+function publicAppElement(element: ReactNode) {
+  return <RejectIncompleteAuth>{element}</RejectIncompleteAuth>
 }
 
 const router = createBrowserRouter([
@@ -42,7 +46,7 @@ const router = createBrowserRouter([
   {
     element: <MainLayout />,
     children: [
-      { path: '/chart', element: <ChartPage /> },
+      { path: '/chart', element: publicAppElement(<ChartPage />) },
       { path: '/watchlist', element: protectedElement(<WatchlistPage />) },
       { path: '/recommend', element: protectedElement(<RecommendPage />) },
       { path: '/portfolio', element: protectedElement(<PortfolioPage />) },
@@ -50,9 +54,9 @@ const router = createBrowserRouter([
     ],
   },
   { path: '/watchlist/add-group', element: protectedElement(<AddGroupPage />) },
-  { path: '/stock/:id', element: <StockDetailPage /> },
-  { path: '/stock/:id/financials', element: <FinancialsPage /> },
-  { path: '/stock/:id/daily-prices', element: <DailyPricesPage /> },
+  { path: '/stock/:id', element: publicAppElement(<StockDetailPage />) },
+  { path: '/stock/:id/financials', element: publicAppElement(<FinancialsPage />) },
+  { path: '/stock/:id/daily-prices', element: publicAppElement(<DailyPricesPage />) },
   { path: '/recommend/analyzing', element: protectedElement(<AnalyzingPage />) },
   { path: '/recommend/:id', element: protectedElement(<RecommendDetailPage />) },
   { path: '/notification', element: protectedElement(<NotificationPage />) },

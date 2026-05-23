@@ -1,6 +1,5 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { getMyTerms, hasAgreedAllTerms } from '../../apis/auth'
 import Button from '../../components/Button'
 import { useAuth } from '../../contexts/useAuth'
 
@@ -16,35 +15,23 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
-  const { isAuthenticated, isLoading, isProfileComplete, login } = useAuth()
+  const { isAuthenticated, isLoading, isProfileComplete, login, logout } = useAuth()
   const state = location.state as LoginLocationState | null
   const from = state?.from
   const redirectTo = `${from?.pathname ?? '/chart'}${from?.search ?? ''}${from?.hash ?? ''}`
   const oauthError = searchParams.get('error')
+  const didResetIncompleteAuthRef = useRef(false)
 
   useEffect(() => {
-    let isMounted = true
-
     if (!isLoading && isAuthenticated) {
       if (isProfileComplete) {
         navigate('/chart', { replace: true })
-      } else {
-        getMyTerms()
-          .then((terms) => {
-            if (!isMounted) return
-            navigate(hasAgreedAllTerms(terms) ? '/basic-info' : '/agreement', { replace: true })
-          })
-          .catch(() => {
-            if (!isMounted) return
-            navigate('/agreement', { replace: true })
-          })
+      } else if (!didResetIncompleteAuthRef.current) {
+        didResetIncompleteAuthRef.current = true
+        void logout()
       }
     }
-
-    return () => {
-      isMounted = false
-    }
-  }, [isAuthenticated, isLoading, isProfileComplete, navigate])
+  }, [isAuthenticated, isLoading, isProfileComplete, logout, navigate])
 
   return (
     <div className="screen flex flex-col px-6 pt-[84px] pb-10">
