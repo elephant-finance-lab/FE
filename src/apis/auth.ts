@@ -28,6 +28,26 @@ export interface UserIdResponse {
   userId: number
 }
 
+export type TermsType = 'INVESTMENT' | 'TRADE_RISK' | 'PRIVACY' | 'SERVICE'
+
+export interface UserTermsItem {
+  termsType: TermsType
+  agreed: boolean
+  agreedAt: string | null
+}
+
+export interface UserTermsResponse {
+  items: UserTermsItem[]
+}
+
+const requiredTerms: TermsType[] = ['INVESTMENT', 'TRADE_RISK', 'PRIVACY', 'SERVICE']
+
+export function hasAgreedAllTerms(terms: UserTermsResponse | null | undefined) {
+  return requiredTerms.every((type) =>
+    terms?.items.some((item) => item.termsType === type && item.agreed),
+  )
+}
+
 export function getOAuthLoginUrl(provider: SocialProvider) {
   return buildApiUrl(`/oauth2/authorization/${provider}`)
 }
@@ -44,6 +64,17 @@ export function registerUserInfo(payload: RegisterUserInfoRequest) {
   return apiRequest<UserIdResponse>('/api/users/me', {
     method: 'POST',
     body: JSON.stringify(payload),
+  })
+}
+
+export function getMyTerms() {
+  return apiRequest<UserTermsResponse>('/api/users/me/terms')
+}
+
+export function agreeAllTerms() {
+  return apiRequest<void>('/api/users/me/terms', {
+    method: 'POST',
+    body: JSON.stringify({ agreeAll: true }),
   })
 }
 

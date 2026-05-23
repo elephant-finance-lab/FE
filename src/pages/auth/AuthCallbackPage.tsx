@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { getMyTerms, hasAgreedAllTerms } from '../../apis/auth'
 import { useAuth } from '../../contexts/useAuth'
 import { takeAuthRedirectPath } from '../../lib/authStorage'
 
@@ -33,11 +34,14 @@ export default function AuthCallbackPage() {
       }
     }
 
-    completeLogin(token).then((result) => {
+    completeLogin(token).then(async (result) => {
       if (!isMounted) return
 
       if (result.needsProfileSetup) {
-        navigate('/basic-info', { replace: true })
+        const terms = await getMyTerms().catch(() => null)
+        if (!isMounted) return
+
+        navigate(hasAgreedAllTerms(terms) ? '/basic-info' : '/agreement', { replace: true })
         return
       }
 

@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { registerUserInfo, type Gender } from '../../apis/auth'
+import { getMyTerms, hasAgreedAllTerms, registerUserInfo, type Gender } from '../../apis/auth'
 import Button from '../../components/Button'
 import { useAuth } from '../../contexts/useAuth'
 import { takeAuthRedirectPath } from '../../lib/authStorage'
@@ -24,6 +24,7 @@ type FormData = z.infer<typeof schema>
 export default function BasicInfoPage() {
   const navigate = useNavigate()
   const { checkAuth } = useAuth()
+  const [isCheckingTerms, setIsCheckingTerms] = useState(true)
   const [submitError, setSubmitError] = useState('')
   const {
     register,
@@ -40,6 +41,30 @@ export default function BasicInfoPage() {
   })
 
   const gender = useWatch({ control, name: 'gender' })
+
+  useEffect(() => {
+    let isMounted = true
+
+    getMyTerms()
+      .then((terms) => {
+        if (!isMounted) return
+        if (!hasAgreedAllTerms(terms)) {
+          navigate('/agreement', { replace: true })
+        }
+      })
+      .catch(() => {
+        if (!isMounted) return
+        navigate('/agreement', { replace: true })
+      })
+      .finally(() => {
+        if (!isMounted) return
+        setIsCheckingTerms(false)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [navigate])
 
   const onSubmit = async (data: FormData) => {
     const nextGender: Gender = data.gender === '여성' ? 'FEMALE' : 'MALE'
@@ -58,6 +83,14 @@ export default function BasicInfoPage() {
     } catch {
       setSubmitError('기본 정보를 저장하지 못했어요. 다시 시도해주세요.')
     }
+  }
+
+  if (isCheckingTerms) {
+    return (
+      <div className="screen flex items-center justify-center px-6">
+        <p className="body-copy">약관 동의 상태를 확인하고 있어요.</p>
+      </div>
+    )
   }
 
   return (
