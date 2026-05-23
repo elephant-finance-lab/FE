@@ -44,7 +44,7 @@ const requiredTerms: TermsType[] = ['INVESTMENT', 'TRADE_RISK', 'PRIVACY', 'SERV
 
 export function hasAgreedAllTerms(terms: UserTermsResponse | null | undefined) {
   return requiredTerms.every((type) =>
-    terms?.items.some((item) => item.termsType === type && item.agreed),
+    terms?.items?.some((item) => item.termsType === type && item.agreed),
   )
 }
 
