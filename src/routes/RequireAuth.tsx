@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
+import { getMyTerms, hasAgreedAllTerms } from '../apis/auth'
 import { useAuth } from '../contexts/useAuth'
 
 function AuthLoadingScreen() {
@@ -8,6 +10,38 @@ function AuthLoadingScreen() {
       <p className="body-copy">로그인 상태를 확인하고 있어요.</p>
     </div>
   )
+}
+
+function IncompleteProfileRedirect() {
+  const [nextPath, setNextPath] = useState<string | null>(null)
+
+  useEffect(() => {
+    let isMounted = true
+
+    getMyTerms()
+      .then((terms) => {
+        if (!isMounted) return
+        setNextPath(hasAgreedAllTerms(terms) ? '/basic-info' : '/agreement')
+      })
+      .catch(() => {
+        if (!isMounted) return
+        setNextPath('/agreement')
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  if (!nextPath) {
+    return (
+      <div className="screen flex items-center justify-center px-6">
+        <p className="body-copy">가입 상태를 확인하고 있어요.</p>
+      </div>
+    )
+  }
+
+  return <Navigate to={nextPath} replace />
 }
 
 interface RequireAuthProps {
@@ -28,7 +62,7 @@ export default function RequireAuth({ children, requireProfileComplete = false }
   }
 
   if (requireProfileComplete && !isProfileComplete) {
-    return <Navigate to="/agreement" replace />
+    return <IncompleteProfileRedirect />
   }
 
   return children
