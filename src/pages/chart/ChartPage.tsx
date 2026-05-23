@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { trendingStocks } from '../../data/mockStocks'
 
-const filterTabs = ['거래대금', '거래량', '급상승', '급하락', '인기']
+const filterTabs = ['거래량', '급상승', '급하락', '시가총액', '체결강도']
 
 export default function ChartPage() {
   const navigate = useNavigate()
