@@ -28,7 +28,7 @@ export default function RequireAuth({ children, requireProfileComplete = false }
   }
 
   if (requireProfileComplete && !isProfileComplete) {
-    return <Navigate to="/basic-info" replace />
+    return <Navigate to="/agreement" replace />
   }
 
   return children

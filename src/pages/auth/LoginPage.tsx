@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { getMyTerms, hasAgreedAllTerms } from '../../apis/auth'
 import Button from '../../components/Button'
 import { useAuth } from '../../contexts/useAuth'
 
@@ -22,8 +23,26 @@ export default function LoginPage() {
   const oauthError = searchParams.get('error')
 
   useEffect(() => {
+    let isMounted = true
+
     if (!isLoading && isAuthenticated) {
-      navigate(isProfileComplete ? '/chart' : '/basic-info', { replace: true })
+      if (isProfileComplete) {
+        navigate('/chart', { replace: true })
+      } else {
+        getMyTerms()
+          .then((terms) => {
+            if (!isMounted) return
+            navigate(hasAgreedAllTerms(terms) ? '/basic-info' : '/agreement', { replace: true })
+          })
+          .catch(() => {
+            if (!isMounted) return
+            navigate('/agreement', { replace: true })
+          })
+      }
+    }
+
+    return () => {
+      isMounted = false
     }
   }, [isAuthenticated, isLoading, isProfileComplete, navigate])
 
