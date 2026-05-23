@@ -1,13 +1,21 @@
+import { useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { registerUserInfo, type Gender } from '../../apis/auth'
 import Button from '../../components/Button'
+import { useAuth } from '../../contexts/useAuth'
+import { takeAuthRedirectPath } from '../../lib/authStorage'
 
 const schema = z.object({
   name: z.string().min(2, '이름은 2자 이상 입력해주세요'),
   phone: z.string().regex(/^01[016789]-?\d{3,4}-?\d{4}$/, '올바른 전화번호를 입력해주세요'),
-  account: z.string().min(8, '계좌번호는 8자리 이상이어야 합니다').regex(/^[\d-]+$/, '숫자와 하이픈만 입력 가능합니다'),
+  account: z
+    .string()
+    .trim()
+    .refine((value) => value.length === 0 || value.length >= 8, '계좌번호는 8자리 이상이어야 합니다')
+    .refine((value) => value.length === 0 || /^[\d-]+$/.test(value), '숫자와 하이픈만 입력 가능합니다'),
   gender: z.enum(['여성', '남성'], { error: '성별을 선택해주세요' }),
 })
 
@@ -15,21 +23,41 @@ type FormData = z.infer<typeof schema>
 
 export default function BasicInfoPage() {
   const navigate = useNavigate()
+  const { checkAuth } = useAuth()
+  const [submitError, setSubmitError] = useState('')
   const {
     register,
     handleSubmit,
     setValue,
     control,
-    formState: { errors, isValid },
+    formState: { errors, isSubmitting, isValid },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     mode: 'onChange',
+    defaultValues: {
+      account: '',
+    },
   })
 
   const gender = useWatch({ control, name: 'gender' })
 
-  const onSubmit = () => {
-    navigate('/survey')
+  const onSubmit = async (data: FormData) => {
+    const nextGender: Gender = data.gender === '여성' ? 'FEMALE' : 'MALE'
+    const accountNumber = data.account.trim()
+
+    try {
+      setSubmitError('')
+      await registerUserInfo({
+        name: data.name,
+        phone: data.phone,
+        ...(accountNumber ? { accountNumber } : {}),
+        gender: nextGender,
+      })
+      await checkAuth()
+      navigate(takeAuthRedirectPath('/chart'), { replace: true })
+    } catch {
+      setSubmitError('기본 정보를 저장하지 못했어요. 다시 시도해주세요.')
+    }
   }
 
   return (
@@ -64,12 +92,12 @@ export default function BasicInfoPage() {
           </div>
 
           <div>
-            <label className="field-label">계좌번호</label>
+            <label className="field-label">계좌번호 (선택)</label>
             <input
               {...register('account')}
               type="text"
               className={`field-input ${errors.account ? 'border-error' : ''}`}
-              placeholder="계좌번호를 입력하세요"
+              placeholder="나중에 등록할 수 있어요"
             />
             {errors.account && <p className="text-[12px] leading-4 text-error mt-2 ml-1">{errors.account.message}</p>}
           </div>
@@ -101,8 +129,9 @@ export default function BasicInfoPage() {
       </div>
 
       <div className="pt-8">
-        <Button type="submit" disabled={!isValid}>
-          다음으로
+        {submitError && <p className="mb-3 text-center text-[13px] leading-5 text-error">{submitError}</p>}
+        <Button type="submit" disabled={!isValid || isSubmitting}>
+          {isSubmitting ? '저장 중' : '다음으로'}
         </Button>
       </div>
     </form>

@@ -1,4 +1,6 @@
 import { useNavigate } from 'react-router-dom'
+import { withdrawUser } from '../../apis/auth'
+import { useAuth } from '../../contexts/useAuth'
 
 interface MenuEntry {
   label: string
@@ -9,15 +11,26 @@ const menuItems: MenuEntry[] = [
   { label: '내 정보 수정', to: '/mypage/edit-profile' },
   { label: '계좌 등록', to: '/mypage/account' },
   { label: '계좌 삭제', to: '/mypage/account-delete' },
-  { label: '선호도 조사', to: '/survey' },
-  { label: '로그아웃', to: '/login' },
-  { label: '탈퇴', to: '/login' },
 ]
-
-const user = { name: '김이박' }
 
 export default function MyPage() {
   const navigate = useNavigate()
+  const { logout, user } = useAuth()
+  const displayName = user?.profile?.name ?? user?.userId ?? '사용자'
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/login', { replace: true })
+  }
+
+  const handleWithdraw = async () => {
+    const confirmed = window.confirm('정말 탈퇴하시겠어요?')
+    if (!confirmed) return
+
+    await withdrawUser()
+    await logout()
+    navigate('/login', { replace: true })
+  }
 
   return (
     <div className="pb-10">
@@ -28,7 +41,7 @@ export default function MyPage() {
             <circle cx="12" cy="7" r="4" />
           </svg>
         </div>
-        <p className="text-[18px] font-semibold leading-6 text-gray-900">{user.name}</p>
+        <p className="text-[18px] font-semibold leading-6 text-gray-900">{displayName}</p>
       </div>
 
       <div className="px-5 flex flex-col">
@@ -41,6 +54,18 @@ export default function MyPage() {
             {item.label}
           </button>
         ))}
+        <button
+          onClick={handleLogout}
+          className="h-[44px] flex items-center text-left text-[15px] font-semibold leading-6 text-gray-900 active:bg-gray-50 -mx-3 px-3 rounded-lg transition-colors"
+        >
+          로그아웃
+        </button>
+        <button
+          onClick={handleWithdraw}
+          className="h-[44px] flex items-center text-left text-[15px] font-semibold leading-6 text-gray-900 active:bg-gray-50 -mx-3 px-3 rounded-lg transition-colors"
+        >
+          탈퇴
+        </button>
       </div>
     </div>
   )

@@ -1,10 +1,10 @@
+import type { ReactNode } from 'react'
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
 import MainLayout from './layouts/MainLayout'
 import LoginPage from './pages/auth/LoginPage'
+import AuthCallbackPage from './pages/auth/AuthCallbackPage'
 import AgreementPage from './pages/auth/AgreementPage'
 import BasicInfoPage from './pages/auth/BasicInfoPage'
-import SurveyIntroPage from './pages/survey/SurveyIntroPage'
-import SurveyQuestionPage from './pages/survey/SurveyQuestionPage'
 import ChartPage from './pages/chart/ChartPage'
 import WatchlistPage from './pages/watchlist/WatchlistPage'
 import AddGroupPage from './pages/watchlist/AddGroupPage'
@@ -25,42 +25,52 @@ import TradeAmountPage from './pages/trade/TradeAmountPage'
 import TradeConfirmPage from './pages/trade/TradeConfirmPage'
 import TradeCompletePage from './pages/trade/TradeCompletePage'
 import NotificationPage from './pages/notification/NotificationPage'
+import { AuthProvider } from './contexts/AuthProvider'
+import RequireAuth from './routes/RequireAuth'
+
+function protectedElement(element: ReactNode, requireProfileComplete = true) {
+  return <RequireAuth requireProfileComplete={requireProfileComplete}>{element}</RequireAuth>
+}
 
 const router = createBrowserRouter([
   { path: '/', element: <Navigate to="/chart" replace /> },
   { path: '/login', element: <LoginPage /> },
-  { path: '/agreement', element: <AgreementPage /> },
-  { path: '/basic-info', element: <BasicInfoPage /> },
-  { path: '/survey', element: <SurveyIntroPage /> },
-  { path: '/survey/:step', element: <SurveyQuestionPage /> },
+  { path: '/auth/callback', element: <AuthCallbackPage /> },
+  { path: '/api/auth/me', element: <AuthCallbackPage /> },
+  { path: '/agreement', element: protectedElement(<AgreementPage />, false) },
+  { path: '/basic-info', element: protectedElement(<BasicInfoPage />, false) },
   {
     element: <MainLayout />,
     children: [
       { path: '/chart', element: <ChartPage /> },
-      { path: '/watchlist', element: <WatchlistPage /> },
-      { path: '/recommend', element: <RecommendPage /> },
-      { path: '/portfolio', element: <PortfolioPage /> },
-      { path: '/mypage', element: <MyPage /> },
+      { path: '/watchlist', element: protectedElement(<WatchlistPage />) },
+      { path: '/recommend', element: protectedElement(<RecommendPage />) },
+      { path: '/portfolio', element: protectedElement(<PortfolioPage />) },
+      { path: '/mypage', element: protectedElement(<MyPage />) },
     ],
   },
-  { path: '/watchlist/add-group', element: <AddGroupPage /> },
+  { path: '/watchlist/add-group', element: protectedElement(<AddGroupPage />) },
   { path: '/stock/:id', element: <StockDetailPage /> },
   { path: '/stock/:id/financials', element: <FinancialsPage /> },
   { path: '/stock/:id/daily-prices', element: <DailyPricesPage /> },
-  { path: '/recommend/analyzing', element: <AnalyzingPage /> },
-  { path: '/recommend/:id', element: <RecommendDetailPage /> },
-  { path: '/notification', element: <NotificationPage /> },
-  { path: '/trade/analyzing', element: <AnalyzingPage /> },
-  { path: '/trade/amount', element: <TradeAmountPage /> },
-  { path: '/trade/confirm', element: <TradeConfirmPage /> },
-  { path: '/trade/complete', element: <TradeCompletePage /> },
-  { path: '/mypage/edit-profile', element: <EditProfilePage /> },
-  { path: '/mypage/account', element: <AccountPage /> },
-  { path: '/mypage/account/register', element: <AccountRegisterPage /> },
-  { path: '/mypage/account-delete', element: <AccountDeletePage /> },
-  { path: '/mypage/account-link', element: <AccountLinkPage /> },
+  { path: '/recommend/analyzing', element: protectedElement(<AnalyzingPage />) },
+  { path: '/recommend/:id', element: protectedElement(<RecommendDetailPage />) },
+  { path: '/notification', element: protectedElement(<NotificationPage />) },
+  { path: '/trade/analyzing', element: protectedElement(<AnalyzingPage />) },
+  { path: '/trade/amount', element: protectedElement(<TradeAmountPage />) },
+  { path: '/trade/confirm', element: protectedElement(<TradeConfirmPage />) },
+  { path: '/trade/complete', element: protectedElement(<TradeCompletePage />) },
+  { path: '/mypage/edit-profile', element: protectedElement(<EditProfilePage />) },
+  { path: '/mypage/account', element: protectedElement(<AccountPage />) },
+  { path: '/mypage/account/register', element: protectedElement(<AccountRegisterPage />) },
+  { path: '/mypage/account-delete', element: protectedElement(<AccountDeletePage />) },
+  { path: '/mypage/account-link', element: protectedElement(<AccountLinkPage />) },
 ])
 
 export default function App() {
-  return <RouterProvider router={router} />
+  return (
+    <AuthProvider>
+      <RouterProvider router={router} />
+    </AuthProvider>
+  )
 }

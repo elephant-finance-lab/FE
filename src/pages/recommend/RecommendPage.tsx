@@ -112,7 +112,6 @@ export default function RecommendPage() {
           >
             매수 진행하기
           </Button>
-          <Button variant="secondary" onClick={() => navigate('/survey')}>선호도 조사</Button>
         </div>
       </div>
     </div>
