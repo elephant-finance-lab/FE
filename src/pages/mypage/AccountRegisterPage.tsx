@@ -1,87 +1,47 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { createAccount, type AccountType } from '../../apis/accounts'
 import BackButton from '../../components/BackButton'
-
-const STORAGE_KEY = 'linked-accounts'
-
-interface Account {
-  id: string
-  holderName: string
-  bank: string
-  number: string
-}
-
-const initialAccounts: Account[] = [
-  { id: '1', holderName: '김이박', number: '61300000000000', bank: 'KB국민은행' },
-  { id: '2', holderName: '김이박', number: '61300000000000', bank: '하나은행' },
-  { id: '3', holderName: '김이박', number: '61300000000000', bank: '신한은행' },
-]
-
-function loadAccounts(): Account[] {
-  try {
-    const saved = sessionStorage.getItem(STORAGE_KEY)
-    if (!saved) return initialAccounts
-    const parsed = JSON.parse(saved)
-    return Array.isArray(parsed) ? parsed : initialAccounts
-  } catch {
-    return initialAccounts
-  }
-}
-
-function onlyDigits(value: string) {
-  return value.replace(/\D/g, '')
-}
 
 export default function AccountRegisterPage() {
   const navigate = useNavigate()
-  const [form, setForm] = useState({ holderName: '', bank: '', accountNumber: '' })
-  const [touched, setTouched] = useState({ holderName: false, bank: false, accountNumber: false })
+  const [form, setForm] = useState({
+    accountHolder: '',
+    bankName: '',
+    accountNumber: '',
+    accountType: 'SECURITIES' as AccountType,
+  })
+  const [touched, setTouched] = useState({
+    accountHolder: false,
+    bankName: false,
+    accountNumber: false,
+  })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
 
-  const errors = useMemo(() => {
-    const holderName = form.holderName.trim()
-    const bank = form.bank.trim()
-    const accountNumber = onlyDigits(form.accountNumber)
+  const errors = useMemo(() => ({
+    accountHolder: form.accountHolder.trim().length === 0 ? '예금주를 입력해주세요.' : '',
+    bankName: form.bankName.trim().length === 0 ? '은행명을 입력해주세요.' : '',
+    accountNumber: form.accountNumber.trim().length === 0 ? '계좌번호를 입력해주세요.' : '',
+  }), [form])
 
-    return {
-      holderName:
-        holderName.length === 0
-          ? '예금주를 입력해주세요.'
-          : !/^[가-힣a-zA-Z\s]{2,20}$/.test(holderName)
-            ? '예금주는 한글/영문 2~20자로 입력해주세요.'
-            : '',
-      bank:
-        bank.length === 0
-          ? '은행명을 입력해주세요.'
-          : !/^[가-힣a-zA-Z\s]{2,20}$/.test(bank)
-            ? '은행명은 한글/영문 2~20자로 입력해주세요.'
-            : '',
-      accountNumber:
-        accountNumber.length === 0
-          ? '계좌번호를 입력해주세요.'
-          : accountNumber.length < 10 || accountNumber.length > 16
-            ? '계좌번호는 숫자 10~16자리로 입력해주세요.'
-            : '',
+  const isValid = !errors.accountHolder && !errors.bankName && !errors.accountNumber
+
+  const handleSubmit = async () => {
+    setTouched({ accountHolder: true, bankName: true, accountNumber: true })
+    if (!isValid || isSubmitting) return
+
+    setIsSubmitting(true)
+    setSubmitError('')
+
+    try {
+      await createAccount(form)
+      navigate('/mypage/account')
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : '계좌를 등록하지 못했어요. 다시 시도해주세요.')
+    } finally {
+      setIsSubmitting(false)
     }
-  }, [form])
-
-  const isValid = !errors.holderName && !errors.bank && !errors.accountNumber
-
-  const handleSubmit = () => {
-    setTouched({ holderName: true, bank: true, accountNumber: true })
-    if (!isValid) return
-
-    const accounts = loadAccounts()
-    const next = [
-      ...accounts,
-      {
-        id: `${Date.now()}`,
-        holderName: form.holderName.trim(),
-        bank: form.bank.trim(),
-        number: onlyDigits(form.accountNumber),
-      },
-    ]
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-    navigate('/mypage/account')
   }
 
   return (
@@ -100,16 +60,16 @@ export default function AccountRegisterPage() {
             <label className="text-[15px] font-light leading-[1.2] text-gray-900">예금주</label>
             <input
               type="text"
-              value={form.holderName}
-              onChange={(e) => setForm({ ...form, holderName: e.target.value })}
-              onBlur={() => setTouched((prev) => ({ ...prev, holderName: true }))}
+              value={form.accountHolder}
+              onChange={(e) => setForm({ ...form, accountHolder: e.target.value })}
+              onBlur={() => setTouched((previous) => ({ ...previous, accountHolder: true }))}
               className={`h-[52px] w-full rounded-[13px] bg-gray-100/60 px-5 text-[16px] leading-6 text-gray-900 placeholder:text-gray-400 outline-none focus:bg-gray-100 ${
-                touched.holderName && errors.holderName ? 'ring-1 ring-toss-red' : ''
+                touched.accountHolder && errors.accountHolder ? 'ring-1 ring-toss-red' : ''
               }`}
               placeholder="예금주를 입력하세요"
             />
-            {touched.holderName && errors.holderName && (
-              <p className="text-[11px] leading-4 text-toss-red">{errors.holderName}</p>
+            {touched.accountHolder && errors.accountHolder && (
+              <p className="text-[11px] leading-4 text-toss-red">{errors.accountHolder}</p>
             )}
           </div>
 
@@ -117,16 +77,16 @@ export default function AccountRegisterPage() {
             <label className="text-[15px] font-light leading-[1.2] text-gray-900">은행명</label>
             <input
               type="text"
-              value={form.bank}
-              onChange={(e) => setForm({ ...form, bank: e.target.value })}
-              onBlur={() => setTouched((prev) => ({ ...prev, bank: true }))}
+              value={form.bankName}
+              onChange={(e) => setForm({ ...form, bankName: e.target.value })}
+              onBlur={() => setTouched((previous) => ({ ...previous, bankName: true }))}
               className={`h-[52px] w-full rounded-[13px] bg-gray-100/60 px-5 text-[16px] leading-6 text-gray-900 placeholder:text-gray-400 outline-none focus:bg-gray-100 ${
-                touched.bank && errors.bank ? 'ring-1 ring-toss-red' : ''
+                touched.bankName && errors.bankName ? 'ring-1 ring-toss-red' : ''
               }`}
               placeholder="은행명을 입력하세요"
             />
-            {touched.bank && errors.bank && (
-              <p className="text-[11px] leading-4 text-toss-red">{errors.bank}</p>
+            {touched.bankName && errors.bankName && (
+              <p className="text-[11px] leading-4 text-toss-red">{errors.bankName}</p>
             )}
           </div>
 
@@ -134,10 +94,9 @@ export default function AccountRegisterPage() {
             <label className="text-[15px] font-light leading-[1.2] text-gray-900">계좌 번호</label>
             <input
               type="text"
-              inputMode="numeric"
               value={form.accountNumber}
-              onChange={(e) => setForm({ ...form, accountNumber: onlyDigits(e.target.value) })}
-              onBlur={() => setTouched((prev) => ({ ...prev, accountNumber: true }))}
+              onChange={(e) => setForm({ ...form, accountNumber: e.target.value })}
+              onBlur={() => setTouched((previous) => ({ ...previous, accountNumber: true }))}
               className={`h-[52px] w-full rounded-[13px] bg-gray-100/60 px-5 text-[16px] leading-6 text-gray-900 placeholder:text-gray-400 outline-none focus:bg-gray-100 ${
                 touched.accountNumber && errors.accountNumber ? 'ring-1 ring-toss-red' : ''
               }`}
@@ -147,18 +106,51 @@ export default function AccountRegisterPage() {
               <p className="text-[11px] leading-4 text-toss-red">{errors.accountNumber}</p>
             )}
           </div>
+
+          <div className="flex flex-col gap-[7px]">
+            <label className="text-[15px] font-light leading-[1.2] text-gray-900">계좌 유형</label>
+            <div className="relative">
+              <select
+                value={form.accountType}
+                onChange={(e) => setForm({ ...form, accountType: e.target.value as AccountType })}
+                className="h-[52px] w-full appearance-none rounded-[13px] bg-gray-100/60 pl-5 pr-14 text-[16px] leading-6 text-gray-900 outline-none focus:bg-gray-100"
+              >
+                <option value="SECURITIES">증권 계좌</option>
+                <option value="COMPREHENSIVE">종합 계좌</option>
+              </select>
+              <svg
+                aria-hidden="true"
+                className="pointer-events-none absolute right-7 top-1/2 -translate-y-1/2 text-gray-500"
+                width="12"
+                height="7"
+                viewBox="0 0 12 7"
+                fill="none"
+              >
+                <path
+                  d="M1 1L6 6L11 1"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+          </div>
         </div>
 
         <div className="mt-[55px] flex justify-center">
           <button
             type="button"
-            onClick={handleSubmit}
-            disabled={!isValid}
+            onClick={() => void handleSubmit()}
+            disabled={!isValid || isSubmitting}
             className="h-11 px-8 rounded-[12px] bg-[rgba(100,100,100,0.8)] text-white text-[16px] font-semibold leading-[1.2] active:bg-[rgba(100,100,100,1)] disabled:opacity-40 disabled:pointer-events-none transition-opacity"
           >
-            등록하기
+            {isSubmitting ? '등록 중' : '등록하기'}
           </button>
         </div>
+        {submitError && (
+          <p className="mt-3 text-center text-[13px] leading-5 text-toss-red">{submitError}</p>
+        )}
       </div>
     </div>
   )

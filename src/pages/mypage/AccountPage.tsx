@@ -1,50 +1,66 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { deleteAccount, getAccounts, type AccountInfo } from '../../apis/accounts'
 import BackButton from '../../components/BackButton'
 
-const initialAccounts = [
-  { id: '1', number: '61300000000000', bank: 'KB국민은행' },
-  { id: '2', number: '61300000000000', bank: '하나은행' },
-  { id: '3', number: '61300000000000', bank: '신한은행' },
-]
-
-const STORAGE_KEY = 'linked-accounts'
-
-function loadAccounts() {
-  try {
-    const saved = sessionStorage.getItem(STORAGE_KEY)
-    if (!saved) return initialAccounts
-    const parsed = JSON.parse(saved)
-    return Array.isArray(parsed) ? parsed : initialAccounts
-  } catch {
-    return initialAccounts
-  }
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback
 }
 
 export default function AccountPage() {
   const navigate = useNavigate()
-  const [accounts, setAccounts] = useState(loadAccounts)
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [accounts, setAccounts] = useState<AccountInfo[]>([])
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [isLoading, setIsLoading] = useState(true)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [message, setMessage] = useState('')
 
   const hasSelected = selectedIds.size > 0
 
-  const toggleAccount = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
+  const refreshAccounts = useCallback(async () => {
+    const result = await getAccounts()
+    setAccounts(result)
+    setSelectedIds(new Set())
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void refreshAccounts()
+        .catch((error) => setMessage(errorMessage(error, '계좌 목록을 불러오지 못했어요.')))
+        .finally(() => setIsLoading(false))
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [refreshAccounts])
+
+  const toggleAccount = (id: number) => {
+    setSelectedIds((previous) => {
+      const next = new Set(previous)
       if (next.has(id)) next.delete(id)
       else next.add(id)
       return next
     })
   }
 
-  const handleDelete = () => {
-    if (!hasSelected) return
-    setAccounts((prev) => {
-      const next = prev.filter((account) => !selectedIds.has(account.id))
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-      return next
-    })
-    setSelectedIds(new Set())
+  const handleDelete = async () => {
+    if (!hasSelected || isDeleting) return
+
+    setIsDeleting(true)
+    setMessage('')
+
+    try {
+      await Promise.all([...selectedIds].map((accountId) => deleteAccount(accountId)))
+      await refreshAccounts()
+    } catch (error) {
+      setMessage(errorMessage(error, '계좌를 삭제하지 못했어요. 다시 시도해주세요.'))
+      try {
+        await refreshAccounts()
+      } catch {
+        // Keep the mutation failure visible if the follow-up refresh also fails.
+      }
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   return (
@@ -55,17 +71,23 @@ export default function AccountPage() {
 
       <div className="px-[22px] pt-[30px] flex-1">
         <h1 className="text-[25px] font-semibold leading-[1.2] text-gray-900 mb-[38px]">
-          연결된 계좌 목록
+          계좌 관리
         </h1>
+
+        {message && <p className="mb-5 text-[13px] leading-5 text-toss-red">{message}</p>}
+        {isLoading && <p className="text-[14px] leading-5 text-gray-500">계좌 목록을 불러오고 있어요.</p>}
+        {!isLoading && accounts.length === 0 && (
+          <p className="text-[14px] leading-5 text-gray-500">연결된 계좌가 없습니다.</p>
+        )}
 
         <div className="flex flex-col gap-6">
           {accounts.map((account) => {
-            const selected = selectedIds.has(account.id)
+            const selected = selectedIds.has(account.accountId)
             return (
               <button
-                key={account.id}
+                key={account.accountId}
                 type="button"
-                onClick={() => toggleAccount(account.id)}
+                onClick={() => toggleAccount(account.accountId)}
                 className="flex items-center justify-between text-left active:bg-gray-50 rounded-xl transition-colors"
                 aria-pressed={selected}
               >
@@ -78,11 +100,9 @@ export default function AccountPage() {
                   </span>
                   <div>
                     <p className="text-[16px] font-medium leading-5 tracking-[0.02em] text-gray-900 tabular-nums">
-                      {account.number}
+                      {account.accountNumber}
                     </p>
-                    <p className="text-[12px] leading-4 text-gray-700 mt-1.5">
-                      {account.bank}
-                    </p>
+                    <p className="text-[12px] leading-4 text-gray-700 mt-1.5">{account.bankName}</p>
                   </div>
                 </div>
 
@@ -110,11 +130,11 @@ export default function AccountPage() {
           </button>
           <button
             type="button"
-            onClick={handleDelete}
-            disabled={!hasSelected}
+            onClick={() => void handleDelete()}
+            disabled={!hasSelected || isDeleting}
             className="h-11 px-7 rounded-[12px] bg-[rgba(100,100,100,0.8)] text-white text-[16px] font-semibold leading-[1.2] active:bg-[rgba(100,100,100,1)] disabled:opacity-40 disabled:pointer-events-none transition-opacity"
           >
-            삭제하기
+            {isDeleting ? '삭제 중' : '삭제하기'}
           </button>
         </div>
       </div>

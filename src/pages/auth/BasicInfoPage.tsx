@@ -11,11 +11,6 @@ import { takeAuthRedirectPath } from '../../lib/authStorage'
 const schema = z.object({
   name: z.string().min(2, '이름은 2자 이상 입력해주세요'),
   phone: z.string().regex(/^01[016789]-?\d{3,4}-?\d{4}$/, '올바른 전화번호를 입력해주세요'),
-  account: z
-    .string()
-    .trim()
-    .refine((value) => value.length === 0 || value.length >= 8, '계좌번호는 8자리 이상이어야 합니다')
-    .refine((value) => value.length === 0 || /^[\d-]+$/.test(value), '숫자와 하이픈만 입력 가능합니다'),
   gender: z.enum(['여성', '남성'], { error: '성별을 선택해주세요' }),
 })
 
@@ -35,9 +30,6 @@ export default function BasicInfoPage() {
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     mode: 'onChange',
-    defaultValues: {
-      account: '',
-    },
   })
 
   const gender = useWatch({ control, name: 'gender' })
@@ -68,14 +60,12 @@ export default function BasicInfoPage() {
 
   const onSubmit = async (data: FormData) => {
     const nextGender: Gender = data.gender === '여성' ? 'FEMALE' : 'MALE'
-    const accountNumber = data.account.trim()
 
     try {
       setSubmitError('')
       await registerUserInfo({
         name: data.name,
         phone: data.phone,
-        ...(accountNumber ? { accountNumber } : {}),
         gender: nextGender,
       })
       await checkAuth()
@@ -122,17 +112,6 @@ export default function BasicInfoPage() {
               placeholder="010-0000-0000"
             />
             {errors.phone && <p className="text-[12px] leading-4 text-error mt-2 ml-1">{errors.phone.message}</p>}
-          </div>
-
-          <div>
-            <label className="field-label">계좌번호 (선택)</label>
-            <input
-              {...register('account')}
-              type="text"
-              className={`field-input ${errors.account ? 'border-error' : ''}`}
-              placeholder="나중에 등록할 수 있어요"
-            />
-            {errors.account && <p className="text-[12px] leading-4 text-error mt-2 ml-1">{errors.account.message}</p>}
           </div>
 
           <div>

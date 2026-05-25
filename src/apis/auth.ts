@@ -20,7 +20,6 @@ export interface UserProfile {
 export interface RegisterUserInfoRequest {
   name: string
   phone: string
-  accountNumber?: string
   gender: Gender
 }
 
