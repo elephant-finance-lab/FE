@@ -331,38 +331,43 @@ export default function ChartPage() {
 
   return (
     <div className="pb-2">
-      <div className="border-b border-[rgba(217,217,217,0.7)] px-[27px] pt-6 pb-5">
-        <span className="text-[15px] font-semibold leading-6 text-gray-900">실시간 차트</span>
+      <div className="sticky top-0 z-20 bg-white border-b border-gray-100 shadow-[0_1px_4px_rgba(0,0,0,0.03)]">
+        <div className="px-[27px] pt-6 pb-5">
+          <span className="text-[15px] font-semibold leading-6 text-gray-900">실시간 차트</span>
+        </div>
+
+        <div className="px-[27px] pt-4 pb-8">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {rankingTabs.map((tab) => (
+              <button
+                key={tab.type}
+                type="button"
+                onClick={() => selectRankingType(tab.type)}
+                className={`h-[30px] px-3 rounded-[7px] text-[13px] leading-6 font-normal transition-colors ${
+                  activeRankingType === tab.type
+                    ? 'bg-[rgba(217,217,217,0.4)] text-gray-900'
+                    : 'bg-transparent text-gray-700/60'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      <div className="pt-4 pb-12 px-[27px]">
-        <div className="flex items-center gap-2.5 flex-wrap">
-          {rankingTabs.map((tab) => (
-            <button
-              key={tab.type}
-              type="button"
-              onClick={() => selectRankingType(tab.type)}
-              className={`h-[30px] px-3 rounded-[7px] text-[13px] leading-6 font-normal transition-colors ${
-                activeRankingType === tab.type
-                  ? 'bg-[rgba(217,217,217,0.4)] text-gray-900'
-                  : 'bg-transparent text-gray-700/60'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-        {actionError && <p className="mt-4 text-[12px] leading-5 text-error">{actionError}</p>}
-      </div>
+      {actionError && (
+        <p className="px-[27px] pt-4 text-[12px] leading-5 text-error">{actionError}</p>
+      )}
 
       {isRankingLoading && (
-        <div className="px-[27px]" aria-label="종목 랭킹 로딩 중">
+        <div className="px-[27px] pt-6" aria-label="종목 랭킹 로딩 중">
           <RankingSkeleton count={RANKING_BATCH_SIZE} />
         </div>
       )}
 
       {!isRankingLoading && rankingError && (
-        <div className="px-[27px] py-6">
+        <div className="px-[27px] pt-6 pb-6">
           <p className="text-[13px] leading-5 text-gray-500">데이터를 불러오지 못했습니다.</p>
           <button
             type="button"
@@ -375,13 +380,13 @@ export default function ChartPage() {
       )}
 
       {!isRankingLoading && !rankingError && rankingItems.length === 0 && (
-        <p className="px-[27px] py-6 text-[13px] leading-5 text-gray-500">
+        <p className="px-[27px] pt-6 pb-6 text-[13px] leading-5 text-gray-500">
           표시할 종목이 없습니다.
         </p>
       )}
 
       {!isRankingLoading && !rankingError && (
-        <div className="px-[27px] flex flex-col gap-7">
+        <div className="px-[27px] pt-6 flex flex-col gap-7">
           {visibleRankingItems.map((stock) => {
             const ticker = stock.tickerCode
             const isFilled = Boolean(ticker && groups.some((group) => hasTicker(group, ticker)))
