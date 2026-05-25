@@ -9,8 +9,7 @@ interface MenuEntry {
 
 const menuItems: MenuEntry[] = [
   { label: '내 정보 수정', to: '/mypage/edit-profile' },
-  { label: '계좌 등록', to: '/mypage/account' },
-  { label: '계좌 삭제', to: '/mypage/account-delete' },
+  { label: '계좌 관리', to: '/mypage/account' },
 ]
 
 export default function MyPage() {
