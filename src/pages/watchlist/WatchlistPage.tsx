@@ -3,28 +3,9 @@ import {
   useEffect,
   useRef,
   useState,
-  type CSSProperties,
   type RefObject,
 } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  TouchSensor,
-  KeyboardSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core'
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
 import { getStockSummary, type StockSummary } from '../../apis/stocks'
 import {
   deleteWatchlistGroup,
@@ -51,7 +32,7 @@ function formatChangeRate(rate: number) {
   return `${value > 0 ? '+' : ''}${value.toLocaleString('ko-KR')}%`
 }
 
-interface SortableGroupRowProps {
+interface GroupRowProps {
   group: WatchlistGroup
   isEditing: boolean
   isBusy: boolean
@@ -64,7 +45,7 @@ interface SortableGroupRowProps {
   inputRef: RefObject<HTMLInputElement | null>
 }
 
-function SortableGroupRow({
+function GroupRow({
   group,
   isEditing,
   isBusy,
@@ -75,24 +56,9 @@ function SortableGroupRow({
   onCommitEdit,
   onCancelEdit,
   inputRef,
-}: SortableGroupRowProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: group.groupId,
-    disabled: isEditing || isBusy,
-  })
-
-  const style: CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 50 : undefined,
-    opacity: isDragging ? 0.92 : 1,
-    boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.12)' : undefined,
-    backgroundColor: isDragging ? '#fff' : undefined,
-    borderRadius: isDragging ? 12 : undefined,
-  }
-
+}: GroupRowProps) {
   return (
-    <div ref={setNodeRef} style={style} className="flex items-center gap-3 py-3 touch-none">
+    <div className="flex items-center gap-3 py-3">
       <button
         type="button"
         onClick={() => onAskDelete(group)}
@@ -162,23 +128,6 @@ function SortableGroupRow({
         </svg>
       </button>
 
-      <button
-        type="button"
-        disabled={isBusy}
-        aria-label="순서 변경"
-        {...attributes}
-        {...listeners}
-        className="ml-auto text-gray-300 shrink-0 cursor-grab active:cursor-grabbing touch-none p-1 disabled:opacity-50"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <circle cx="9" cy="6" r="1.6" />
-          <circle cx="15" cy="6" r="1.6" />
-          <circle cx="9" cy="12" r="1.6" />
-          <circle cx="15" cy="12" r="1.6" />
-          <circle cx="9" cy="18" r="1.6" />
-          <circle cx="15" cy="18" r="1.6" />
-        </svg>
-      </button>
     </div>
   )
 }
@@ -199,19 +148,18 @@ export default function WatchlistPage() {
   const [pendingGroupId, setPendingGroupId] = useState<number | null>(null)
   const [pendingItemTicker, setPendingItemTicker] = useState<string | null>(null)
   const editInputRef = useRef<HTMLInputElement | null>(null)
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  )
+  const groupsRequestIdRef = useRef(0)
+  const isMutationPending = pendingGroupId !== null || pendingItemTicker !== null
 
   const loadGroups = useCallback(async (preferredGroupId?: number | null) => {
+    const requestId = ++groupsRequestIdRef.current
+
     setIsLoading(true)
     setLoadError(null)
 
     try {
       const result = await getWatchlistGroups()
+      if (requestId !== groupsRequestIdRef.current) return
       setGroups(result.groups)
       setActiveGroupId((currentGroupId) => {
         const selectedId = preferredGroupId ?? currentGroupId
@@ -219,9 +167,12 @@ export default function WatchlistPage() {
         return selectedExists ? selectedId : (result.groups[0]?.groupId ?? null)
       })
     } catch (error) {
+      if (requestId !== groupsRequestIdRef.current) return
       setLoadError(errorMessage(error))
     } finally {
-      setIsLoading(false)
+      if (requestId === groupsRequestIdRef.current) {
+        setIsLoading(false)
+      }
     }
   }, [])
 
@@ -230,7 +181,10 @@ export default function WatchlistPage() {
       void loadGroups()
     }, 0)
 
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      groupsRequestIdRef.current += 1
+    }
   }, [loadGroups])
 
   const activeGroup = groups.find((group) => group.groupId === activeGroupId) ?? null
@@ -285,7 +239,7 @@ export default function WatchlistPage() {
   }, [editingGroupId])
 
   const handleRemoveStock = async (item: WatchlistItem) => {
-    if (!activeGroup) return
+    if (!activeGroup || isMutationPending) return
 
     setPendingItemTicker(item.ticker)
     setMutationError(null)
@@ -306,14 +260,20 @@ export default function WatchlistPage() {
     setEditingGroupId(null)
   }
 
+  const dismissModal = () => {
+    if (isMutationPending) return
+    closeModal()
+  }
+
   const askDelete = (group: WatchlistGroup) => {
+    if (isMutationPending) return
     setMutationError(null)
     setDeletingGroup(group)
     setModalState('confirm-delete')
   }
 
   const confirmDelete = async () => {
-    if (!deletingGroup) return
+    if (!deletingGroup || isMutationPending) return
 
     setPendingGroupId(deletingGroup.groupId)
     setMutationError(null)
@@ -330,6 +290,7 @@ export default function WatchlistPage() {
   }
 
   const startEdit = (group: WatchlistGroup) => {
+    if (isMutationPending) return
     setMutationError(null)
     setEditingGroupId(group.groupId)
     setEditingValue(group.name)
@@ -340,7 +301,7 @@ export default function WatchlistPage() {
   }
 
   const commitEdit = async () => {
-    if (editingGroupId === null) return
+    if (editingGroupId === null || isMutationPending) return
 
     const groupId = editingGroupId
     const currentGroup = groups.find((group) => group.groupId === groupId)
@@ -363,19 +324,9 @@ export default function WatchlistPage() {
   }
 
   const goAddGroup = () => {
+    if (isMutationPending) return
     closeModal()
     navigate('/watchlist/add-group')
-  }
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event
-    if (!over || active.id === over.id) return
-    setGroups((previousGroups) => {
-      const oldIndex = previousGroups.findIndex((group) => group.groupId === active.id)
-      const newIndex = previousGroups.findIndex((group) => group.groupId === over.id)
-      if (oldIndex === -1 || newIndex === -1) return previousGroups
-      return arrayMove(previousGroups, oldIndex, newIndex)
-    })
   }
 
   return (
@@ -402,14 +353,16 @@ export default function WatchlistPage() {
         <button
           type="button"
           onClick={goAddGroup}
-          className="h-[30px] px-3 rounded-[7px] text-[13px] leading-6 font-normal text-gray-700/60"
+          disabled={isMutationPending}
+          className="h-[30px] px-3 rounded-[7px] text-[13px] leading-6 font-normal text-gray-700/60 disabled:opacity-50"
         >
           그룹추가
         </button>
         <button
           type="button"
           onClick={() => setModalState('edit')}
-          className="ml-auto text-[12px] leading-5 text-gray-500"
+          disabled={isMutationPending}
+          className="ml-auto text-[12px] leading-5 text-gray-500 disabled:opacity-50"
         >
           그룹 편집
         </button>
@@ -456,6 +409,7 @@ export default function WatchlistPage() {
               tabIndex={0}
               onClick={() => navigate(`/stock/${encodeURIComponent(item.ticker)}`)}
               onKeyDown={(e) => {
+                if (e.target !== e.currentTarget) return
                 if (e.key === 'Enter') navigate(`/stock/${encodeURIComponent(item.ticker)}`)
               }}
               className="flex items-center gap-[17px] cursor-pointer"
@@ -490,7 +444,7 @@ export default function WatchlistPage() {
                   e.stopPropagation()
                   void handleRemoveStock(item)
                 }}
-                disabled={pendingItemTicker === item.ticker}
+                disabled={isMutationPending}
                 className="w-5 h-5 flex items-center justify-center text-gray-400 shrink-0 disabled:opacity-50"
                 aria-label="제거"
               >
@@ -514,14 +468,15 @@ export default function WatchlistPage() {
 
       {modalState !== 'closed' && (
         <>
-          <div className="fixed inset-0 bg-black/40 z-[60] animate-fade-in" onClick={closeModal} />
+          <div className="fixed inset-0 bg-black/40 z-[60] animate-fade-in" onClick={dismissModal} />
           <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[393px] bg-white rounded-t-[24px] z-[70] animate-slide-up shadow-[0_-4px_24px_rgba(0,0,0,0.08)]">
             {modalState === 'edit' ? (
               <div className="px-6 pt-7 pb-7">
                 <button
                   type="button"
                   onClick={goAddGroup}
-                  className="flex items-center gap-3 py-3 w-full text-left"
+                  disabled={isMutationPending}
+                  className="flex items-center gap-3 py-3 w-full text-left disabled:opacity-50"
                 >
                   <span className="w-6 h-6 rounded-full border border-gray-400 flex items-center justify-center text-gray-500">
                     <svg
@@ -540,32 +495,21 @@ export default function WatchlistPage() {
                   <span className="text-[15px] font-medium text-gray-900">새 그룹 추가</span>
                 </button>
 
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleDragEnd}
-                >
-                  <SortableContext
-                    items={groups.map((group) => group.groupId)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    {groups.map((group) => (
-                      <SortableGroupRow
-                        key={group.groupId}
-                        group={group}
-                        isEditing={editingGroupId === group.groupId}
-                        isBusy={pendingGroupId === group.groupId}
-                        editingValue={editingValue}
-                        setEditingValue={setEditingValue}
-                        onAskDelete={askDelete}
-                        onStartEdit={startEdit}
-                        onCommitEdit={() => void commitEdit()}
-                        onCancelEdit={cancelEdit}
-                        inputRef={editInputRef}
-                      />
-                    ))}
-                  </SortableContext>
-                </DndContext>
+                {groups.map((group) => (
+                  <GroupRow
+                    key={group.groupId}
+                    group={group}
+                    isEditing={editingGroupId === group.groupId}
+                    isBusy={isMutationPending}
+                    editingValue={editingValue}
+                    setEditingValue={setEditingValue}
+                    onAskDelete={askDelete}
+                    onStartEdit={startEdit}
+                    onCommitEdit={() => void commitEdit()}
+                    onCancelEdit={cancelEdit}
+                    inputRef={editInputRef}
+                  />
+                ))}
 
                 {mutationError && (
                   <p className="mt-3 text-[13px] leading-5 text-error">{mutationError}</p>
@@ -573,10 +517,11 @@ export default function WatchlistPage() {
 
                 <button
                   type="button"
-                  onClick={closeModal}
-                  className="mt-8 w-full h-[52px] bg-black text-white text-[15px] font-medium rounded-full active:bg-gray-800 transition-colors"
+                  onClick={dismissModal}
+                  disabled={isMutationPending}
+                  className="mt-8 w-full h-[52px] bg-black text-white text-[15px] font-medium rounded-full active:bg-gray-800 transition-colors disabled:bg-gray-400"
                 >
-                  확인
+                  {isMutationPending ? '처리 중' : '확인'}
                 </button>
               </div>
             ) : (
@@ -595,7 +540,7 @@ export default function WatchlistPage() {
                   <button
                     type="button"
                     onClick={() => void confirmDelete()}
-                    disabled={pendingGroupId !== null}
+                    disabled={isMutationPending}
                     className="w-full h-[52px] bg-black text-white text-[15px] font-medium rounded-full active:bg-gray-800 transition-colors disabled:bg-gray-400"
                   >
                     {pendingGroupId !== null ? '삭제 중' : '삭제하기'}
@@ -603,7 +548,8 @@ export default function WatchlistPage() {
                   <button
                     type="button"
                     onClick={() => setModalState('edit')}
-                    className="w-full h-[52px] bg-white text-gray-900 text-[15px] font-medium rounded-full border border-gray-300 active:bg-gray-50 transition-colors"
+                    disabled={isMutationPending}
+                    className="w-full h-[52px] bg-white text-gray-900 text-[15px] font-medium rounded-full border border-gray-300 active:bg-gray-50 transition-colors disabled:text-gray-400"
                   >
                     나중에
                   </button>

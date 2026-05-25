@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createWatchlistGroup } from '../../apis/watchlist'
 
@@ -13,6 +13,15 @@ export default function AddGroupPage() {
   const [name, setName] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const isMountedRef = useRef(true)
+
+  useEffect(() => {
+    isMountedRef.current = true
+
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   const handleConfirm = async () => {
     const trimmed = name.trim()
@@ -23,11 +32,15 @@ export default function AddGroupPage() {
 
     try {
       await createWatchlistGroup({ name: trimmed })
+      if (!isMountedRef.current) return
       navigate('/watchlist', { replace: true })
     } catch (requestError) {
+      if (!isMountedRef.current) return
       setError(errorMessage(requestError))
     } finally {
-      setIsSubmitting(false)
+      if (isMountedRef.current) {
+        setIsSubmitting(false)
+      }
     }
   }
 
@@ -39,8 +52,9 @@ export default function AddGroupPage() {
         <button
           type="button"
           onClick={() => navigate(-1)}
+          disabled={isSubmitting}
           aria-label="뒤로"
-          className="w-9 h-9 -ml-2 flex items-center justify-center"
+          className="w-9 h-9 -ml-2 flex items-center justify-center disabled:opacity-40"
         >
           <svg
             width="24"

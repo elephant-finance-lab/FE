@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   addWatchlistItem,
@@ -38,10 +38,16 @@ export default function ChartPage() {
   const [isCreatingGroup, setIsCreatingGroup] = useState(false)
   const [showGroupInput, setShowGroupInput] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
+  const groupsRequestIdRef = useRef(0)
+  const isPickerBusy = pendingGroupId !== null || isCreatingGroup
 
   const loadGroups = useCallback(async () => {
+    const requestId = ++groupsRequestIdRef.current
+
     if (!isAuthenticated) {
       setGroups([])
+      setIsGroupsLoading(false)
+      setGroupsError(null)
       return
     }
 
@@ -50,11 +56,15 @@ export default function ChartPage() {
 
     try {
       const result = await getWatchlistGroups()
+      if (requestId !== groupsRequestIdRef.current) return
       setGroups(result.groups)
     } catch (error) {
+      if (requestId !== groupsRequestIdRef.current) return
       setGroupsError(errorMessage(error))
     } finally {
-      setIsGroupsLoading(false)
+      if (requestId === groupsRequestIdRef.current) {
+        setIsGroupsLoading(false)
+      }
     }
   }, [isAuthenticated])
 
@@ -63,7 +73,10 @@ export default function ChartPage() {
       void loadGroups()
     }, 0)
 
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      groupsRequestIdRef.current += 1
+    }
   }, [loadGroups])
 
   useEffect(() => {
@@ -78,9 +91,13 @@ export default function ChartPage() {
   const closePicker = () => {
     setPickerStock(null)
     setPickerError(null)
-    setPendingGroupId(null)
     setShowGroupInput(false)
     setNewGroupName('')
+  }
+
+  const dismissPicker = () => {
+    if (isPickerBusy) return
+    closePicker()
   }
 
   const removeImmediately = async (group: WatchlistGroup, ticker: string) => {
@@ -99,7 +116,7 @@ export default function ChartPage() {
 
   const handleHeartClick = async (stock: Stock) => {
     const ticker = stock.ticker
-    if (!ticker || isAuthLoading) return
+    if (!ticker || isAuthLoading || isPickerBusy) return
 
     if (!isAuthenticated) {
       navigate('/login', { state: { from: location } })
@@ -121,7 +138,7 @@ export default function ChartPage() {
 
   const handleGroupChoice = async (group: WatchlistGroup) => {
     const ticker = pickerStock?.ticker
-    if (!ticker) return
+    if (!ticker || isPickerBusy) return
 
     setPendingGroupId(group.groupId)
     setPickerError(null)
@@ -143,7 +160,7 @@ export default function ChartPage() {
 
   const handleCreateGroup = async () => {
     const name = newGroupName.trim()
-    if (!name || name.length > 50) return
+    if (!name || name.length > 50 || isPickerBusy) return
 
     setIsCreatingGroup(true)
     setPickerError(null)
@@ -209,6 +226,7 @@ export default function ChartPage() {
               tabIndex={0}
               onClick={() => navigate(`/stock/${encodeURIComponent(detailId)}`)}
               onKeyDown={(e) => {
+                if (e.target !== e.currentTarget) return
                 if (e.key === 'Enter') navigate(`/stock/${encodeURIComponent(detailId)}`)
               }}
               className="flex items-center gap-[22px] cursor-pointer"
@@ -243,7 +261,7 @@ export default function ChartPage() {
                     void handleHeartClick(stock)
                   }}
                   disabled={
-                    pendingGroupId !== null ||
+                    isPickerBusy ||
                     isAuthLoading ||
                     (isAuthenticated && isGroupsLoading)
                   }
@@ -280,7 +298,7 @@ export default function ChartPage() {
 
       {pickerStock && (
         <>
-          <div className="fixed inset-0 bg-black/40 z-[60] animate-fade-in" onClick={closePicker} />
+          <div className="fixed inset-0 bg-black/40 z-[60] animate-fade-in" onClick={dismissPicker} />
           <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[393px] bg-white rounded-t-[24px] z-[70] animate-slide-up shadow-[0_-4px_24px_rgba(0,0,0,0.08)] px-6 pt-7 pb-7">
             <h3 className="text-[17px] font-semibold leading-7 text-gray-900">
               {pickerMode === 'add' ? `${pickerStock.name}을 담을 그룹` : '제거할 그룹을 선택해주세요'}
@@ -301,6 +319,7 @@ export default function ChartPage() {
                   <button
                     type="button"
                     onClick={() => void loadGroups()}
+                    disabled={isPickerBusy}
                     className="mt-2 text-[13px] leading-5 text-gray-700 underline"
                   >
                     다시 시도
@@ -313,7 +332,7 @@ export default function ChartPage() {
                   <button
                     key={group.groupId}
                     type="button"
-                    disabled={pendingGroupId !== null}
+                    disabled={isPickerBusy}
                     onClick={() => void handleGroupChoice(group)}
                     className="flex h-[52px] w-full items-center justify-between rounded-[12px] bg-gray-50 px-4 text-left disabled:opacity-50"
                   >
@@ -340,6 +359,7 @@ export default function ChartPage() {
                       value={newGroupName}
                       onChange={(e) => setNewGroupName(e.target.value)}
                       maxLength={50}
+                      disabled={isPickerBusy}
                       autoFocus
                       placeholder="그룹명"
                       className="h-[46px] flex-1 rounded-[10px] border border-gray-200 px-3 text-[14px] text-gray-900"
@@ -347,7 +367,7 @@ export default function ChartPage() {
                     <button
                       type="button"
                       onClick={() => void handleCreateGroup()}
-                      disabled={!newGroupName.trim() || isCreatingGroup}
+                      disabled={!newGroupName.trim() || isPickerBusy}
                       className="h-[46px] rounded-[10px] bg-black px-4 text-[13px] text-white disabled:bg-gray-400"
                     >
                       {isCreatingGroup ? '생성 중' : '생성'}
@@ -357,7 +377,8 @@ export default function ChartPage() {
                   <button
                     type="button"
                     onClick={() => setShowGroupInput(true)}
-                    className="text-[14px] font-medium leading-6 text-gray-700"
+                    disabled={isPickerBusy}
+                    className="text-[14px] font-medium leading-6 text-gray-700 disabled:opacity-50"
                   >
                     + 새 그룹 만들기
                   </button>
@@ -369,10 +390,11 @@ export default function ChartPage() {
 
             <button
               type="button"
-              onClick={closePicker}
-              className="mt-6 w-full h-[52px] bg-white text-gray-900 text-[15px] font-medium rounded-full border border-gray-300 active:bg-gray-50 transition-colors"
+              onClick={dismissPicker}
+              disabled={isPickerBusy}
+              className="mt-6 w-full h-[52px] bg-white text-gray-900 text-[15px] font-medium rounded-full border border-gray-300 active:bg-gray-50 transition-colors disabled:text-gray-400"
             >
-              닫기
+              {isPickerBusy ? '처리 중' : '닫기'}
             </button>
           </div>
         </>
