@@ -1,40 +1,145 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { getMarketIndexes, type MarketIndex, type MarketIndexes } from '../apis/chart'
 
-const indices = [
-  { name: '코스피', value: '5,438.87', changePercent: '0.3%', isPositive: false },
-  { name: '코스닥', value: '1,141.51', changePercent: '0.3%', isPositive: true },
-]
+const MARKET_REFRESH_INTERVAL_MS = 30_000
+
+function formatNumber(value: number) {
+  if (!Number.isFinite(value)) return '-'
+  return value.toLocaleString('ko-KR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+function formatSignedNumber(value: number, suffix = '') {
+  if (!Number.isFinite(value)) return '-'
+  return `${value > 0 ? '+' : ''}${formatNumber(value)}${suffix}`
+}
+
+function movementColor(change: number) {
+  if (change > 0) return 'text-toss-red'
+  if (change < 0) return 'text-[#3985FF]'
+  return 'text-gray-500'
+}
+
+function IndexQuote({ name, index }: { name: 'KOSPI' | 'KOSDAQ'; index: MarketIndex | null }) {
+  return (
+    <div className="min-w-0 flex-1">
+      <span className="text-[12px] leading-[18px] text-gray-500 font-normal">{name}</span>
+      {index ? (
+        <>
+          <p className="text-[16px] leading-6 font-semibold text-gray-900 tabular-nums">
+            {formatNumber(index.value)}
+          </p>
+          <p className={`text-[12px] leading-5 font-medium tabular-nums ${movementColor(index.change)}`}>
+            {formatSignedNumber(index.change)} ({formatSignedNumber(index.changeRate, '%')})
+          </p>
+        </>
+      ) : (
+        <p className="mt-1 text-[12px] leading-6 text-gray-400">데이터 없음</p>
+      )}
+    </div>
+  )
+}
 
 export default function TopBar() {
   const navigate = useNavigate()
+  const [indexes, setIndexes] = useState<MarketIndexes | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [hasError, setHasError] = useState(false)
+  const requestIdRef = useRef(0)
+
+  const loadMarketIndexes = useCallback(async (showLoading: boolean) => {
+    const requestId = ++requestIdRef.current
+    if (showLoading) setIsLoading(true)
+
+    try {
+      const nextIndexes = await getMarketIndexes()
+      if (requestId !== requestIdRef.current) return
+      setIndexes(nextIndexes)
+      setHasError(false)
+    } catch {
+      if (requestId !== requestIdRef.current) return
+      setHasError(true)
+    } finally {
+      if (showLoading && requestId === requestIdRef.current) {
+        setIsLoading(false)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    const initialTimer = window.setTimeout(() => {
+      void loadMarketIndexes(true)
+    }, 0)
+    const refreshTimer = window.setInterval(() => {
+      void loadMarketIndexes(false)
+    }, MARKET_REFRESH_INTERVAL_MS)
+
+    return () => {
+      window.clearTimeout(initialTimer)
+      window.clearInterval(refreshTimer)
+      requestIdRef.current += 1
+    }
+  }, [loadMarketIndexes])
 
   return (
-    <div className="flex items-center justify-between px-[17px] pt-[30px] pb-[22px] bg-white">
-      <div className="flex items-stretch">
-        {indices.map((index, i) => (
-          <div key={index.name} className="flex items-stretch">
-            {i > 0 && <div className="mx-3 my-1 border-l border-dashed border-gray-300" />}
-            <div className="flex flex-col justify-center">
-              <span className="text-[13px] leading-[18px] text-gray-500 font-normal">{index.name}</span>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-[15px] leading-6 font-semibold text-gray-900 tabular-nums">{index.value}</span>
-                <span className={`text-[13px] leading-6 font-medium tabular-nums ${index.isPositive ? 'text-toss-red' : 'text-[#3985FF]'}`}>
-                  {index.isPositive ? '+' : '-'}{index.changePercent}
-                </span>
-              </div>
-            </div>
-          </div>
-        ))}
+    <header className="px-[20px] pt-[20px] pb-[18px] bg-white">
+      <div className="mb-[18px] flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <img src="/logo.png" alt="" className="h-8 w-8 object-contain" />
+          <span className="text-[17px] font-semibold leading-6 tracking-[-0.01em] text-gray-900">
+            코끼리자산연구소
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate('/notification')}
+          className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-gray-50 active:bg-gray-100 transition-colors"
+          aria-label="알림"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="#9E9E9E">
+            <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
+          </svg>
+        </button>
       </div>
-      <button
-        onClick={() => navigate('/notification')}
-        className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-gray-50 active:bg-gray-100 transition-colors"
-        aria-label="알림"
-      >
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="#9E9E9E">
-          <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
-        </svg>
-      </button>
-    </div>
+
+      {isLoading && !indexes && (
+        <div
+          className="flex items-stretch gap-5 rounded-[14px] bg-gray-50 px-4 py-3"
+          aria-label="시장 지수 로딩 중"
+        >
+          {[0, 1].map((item) => (
+            <div key={item} className="flex-1 animate-pulse">
+              <div className="h-3 w-12 rounded bg-gray-200" />
+              <div className="mt-2 h-5 w-20 rounded bg-gray-200" />
+              <div className="mt-2 h-3 w-24 rounded bg-gray-100" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {hasError && !indexes && !isLoading && (
+        <div className="flex items-center justify-between py-3">
+          <p className="text-[13px] leading-5 text-gray-500">데이터를 불러오지 못했습니다.</p>
+          <button
+            type="button"
+            onClick={() => void loadMarketIndexes(true)}
+            className="text-[13px] leading-5 text-gray-700 underline"
+          >
+            다시 시도
+          </button>
+        </div>
+      )}
+
+      {indexes && (
+        <div className="flex items-stretch rounded-[14px] bg-gray-50 px-4 py-3" aria-label="시장 지수">
+          <IndexQuote name="KOSPI" index={indexes.kospi} />
+          <div className="mx-4 border-l border-dashed border-gray-300" />
+          <IndexQuote name="KOSDAQ" index={indexes.kosdaq} />
+        </div>
+      )}
+    </header>
   )
 }

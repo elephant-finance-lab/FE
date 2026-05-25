@@ -7,15 +7,6 @@ export interface Stock {
   isPositive: boolean
 }
 
-export const trendingStocks: Stock[] = [
-  { id: '1', name: '애플', ticker: 'AAPL', price: '181,200원', changePercent: '4.2%', isPositive: false },
-  { id: '2', name: 'SK 하이닉스', ticker: '000660', price: '181,200원', changePercent: '4.2%', isPositive: false },
-  { id: '3', name: '현대차', ticker: '005380', price: '181,200원', changePercent: '4.2%', isPositive: false },
-  { id: '4', name: '셀바스AI', ticker: '108860', price: '181,200원', changePercent: '4.2%', isPositive: false },
-  { id: '5', name: '아주IB투자', ticker: '027360', price: '181,200원', changePercent: '4.2%', isPositive: false },
-  { id: '6', name: 'KODEX 인버스', ticker: '114800', price: '181,200원', changePercent: '4.2%', isPositive: false },
-]
-
 export const recommendedStocks: Stock[] = [
   { id: 'r1', name: 'APPLE', price: '181,200원', changePercent: '4.2%', isPositive: true },
   { id: 'r2', name: 'NVIDIA', price: '181,200원', changePercent: '4.2%', isPositive: true },
