@@ -32,6 +32,36 @@ function formatChangeRate(rate: number) {
   return `${value > 0 ? '+' : ''}${value.toLocaleString('ko-KR')}%`
 }
 
+function Skeleton({ className }: { className: string }) {
+  return <div className={`animate-pulse rounded bg-gray-100 ${className}`} aria-hidden="true" />
+}
+
+function WatchlistSkeleton() {
+  return (
+    <>
+      <div className="pt-4 pb-6 px-[27px] flex items-center gap-2.5">
+        <Skeleton className="h-[30px] w-[72px] rounded-[7px]" />
+        <Skeleton className="h-[30px] w-[64px] rounded-[7px]" />
+        <Skeleton className="ml-auto h-5 w-14" />
+      </div>
+      <div className="pl-[33px] pr-[16px] flex flex-col gap-7">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div key={index} className="flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <Skeleton className="h-6 w-[44%]" />
+              <div className="mt-1 flex items-center gap-2">
+                <Skeleton className="h-5 w-20" />
+                <Skeleton className="h-5 w-12" />
+              </div>
+            </div>
+            <Skeleton className="h-5 w-5" />
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
 interface GroupRowProps {
   group: WatchlistGroup
   isEditing: boolean
@@ -335,136 +365,141 @@ export default function WatchlistPage() {
         <span className="text-[20px] font-semibold leading-7 text-gray-900">관심</span>
       </div>
 
-      <div className="pt-4 pb-6 px-[27px] flex items-center gap-2.5 flex-wrap">
-        {groups.map((group) => (
-          <button
-            key={group.groupId}
-            type="button"
-            onClick={() => setActiveGroupId(group.groupId)}
-            className={`h-[30px] px-3 rounded-[7px] text-[13px] leading-6 font-normal transition-colors ${
-              activeGroupId === group.groupId
-                ? 'bg-[rgba(217,217,217,0.4)] text-gray-900'
-                : 'bg-transparent text-gray-700/60'
-            }`}
-          >
-            {group.name}
-          </button>
-        ))}
-        <button
-          type="button"
-          onClick={goAddGroup}
-          disabled={isMutationPending}
-          className="h-[30px] px-3 rounded-[7px] text-[13px] leading-6 font-normal text-gray-700/60 disabled:opacity-50"
-        >
-          그룹추가
-        </button>
-        <button
-          type="button"
-          onClick={() => setModalState('edit')}
-          disabled={isMutationPending}
-          className="ml-auto text-[12px] leading-5 text-gray-500 disabled:opacity-50"
-        >
-          그룹 편집
-        </button>
-      </div>
-
-      {loadError && (
-        <div className="px-[33px] pb-5">
-          <p className="text-[13px] leading-5 text-error">{loadError}</p>
-          <button
-            type="button"
-            onClick={() => void loadGroups(activeGroupId)}
-            className="mt-2 text-[13px] leading-5 text-gray-700 underline"
-          >
-            다시 시도
-          </button>
-        </div>
-      )}
-      {mutationError && <p className="px-[33px] pb-5 text-[13px] leading-5 text-error">{mutationError}</p>}
-
-      {isLoading && groups.length === 0 && (
-        <p className="px-[33px] py-6 text-[13px] leading-5 text-gray-500">관심그룹을 불러오고 있어요.</p>
-      )}
-      {!isLoading && !loadError && groups.length === 0 && (
-        <p className="px-[33px] py-6 text-[13px] leading-5 text-gray-500">
-          관심그룹이 없어요. 그룹을 추가해 관심종목을 모아보세요.
-        </p>
-      )}
-      {activeGroup && activeGroup.items.length === 0 && (
-        <p className="px-[33px] py-6 text-[13px] leading-5 text-gray-500">
-          이 그룹에 담긴 관심종목이 없어요.
-        </p>
-      )}
-
-      <div className="pl-[33px] pr-[16px] flex flex-col gap-7">
-        {activeGroup?.items.map((item) => {
-          const summary = summaries[item.ticker]
-          const hasSummary = Boolean(summary)
-          const isPositive = (summary?.changeRate ?? 0) >= 0
-
-          return (
-            <div
-              key={item.itemId}
-              role="button"
-              tabIndex={0}
-              onClick={() => navigate(`/stock/${encodeURIComponent(item.ticker)}`)}
-              onKeyDown={(e) => {
-                if (e.target !== e.currentTarget) return
-                if (e.key === 'Enter') navigate(`/stock/${encodeURIComponent(item.ticker)}`)
-              }}
-              className="flex items-center gap-[17px] cursor-pointer"
+      {isLoading && groups.length === 0 ? (
+        <WatchlistSkeleton />
+      ) : (
+        <>
+          <div className="pt-4 pb-6 px-[27px] flex items-center gap-2.5 flex-wrap">
+            {groups.map((group) => (
+              <button
+                key={group.groupId}
+                type="button"
+                onClick={() => setActiveGroupId(group.groupId)}
+                className={`h-[30px] px-3 rounded-[7px] text-[13px] leading-6 font-normal transition-colors ${
+                  activeGroupId === group.groupId
+                    ? 'bg-[rgba(217,217,217,0.4)] text-gray-900'
+                    : 'bg-transparent text-gray-700/60'
+                }`}
+              >
+                {group.name}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={goAddGroup}
+              disabled={isMutationPending}
+              className="h-[30px] px-3 rounded-[7px] text-[13px] leading-6 font-normal text-gray-700/60 disabled:opacity-50"
             >
-              <div className="w-[33px] h-[33px] rounded-full bg-[#D9D9D9] shrink-0" />
-              <div className="flex-1 flex flex-col gap-1 min-w-0">
-                <span className="text-[15px] font-semibold leading-6 text-gray-900 truncate">
-                  {summary?.stockName ?? item.ticker}
-                </span>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-[12px] leading-5 text-[#2B2B2B] tabular-nums font-light">
-                    {summary
-                      ? formatPrice(summary.currentPriceKrw)
-                      : isSummariesLoading
-                        ? '시세 확인 중'
-                        : '시세 정보 없음'}
-                  </span>
-                  {hasSummary && summary && (
-                    <span
-                      className={`text-[12px] leading-5 tabular-nums font-light ${
-                        isPositive ? 'text-toss-red' : 'text-[#3985FF]'
-                      }`}
-                    >
-                      {formatChangeRate(summary.changeRate)}
-                    </span>
-                  )}
-                </div>
-              </div>
+              그룹추가
+            </button>
+            <button
+              type="button"
+              onClick={() => setModalState('edit')}
+              disabled={isMutationPending}
+              className="ml-auto text-[12px] leading-5 text-gray-500 disabled:opacity-50"
+            >
+              그룹 편집
+            </button>
+          </div>
+
+          {loadError && (
+            <div className="px-[33px] pb-5">
+              <p className="text-[13px] leading-5 text-error">{loadError}</p>
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  void handleRemoveStock(item)
-                }}
-                disabled={isMutationPending}
-                className="w-5 h-5 flex items-center justify-center text-gray-400 shrink-0 disabled:opacity-50"
-                aria-label="제거"
+                onClick={() => void loadGroups(activeGroupId)}
+                className="mt-2 text-[13px] leading-5 text-gray-700 underline"
               >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                >
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
+                다시 시도
               </button>
             </div>
-          )
-        })}
-      </div>
+          )}
+          {mutationError && <p className="px-[33px] pb-5 text-[13px] leading-5 text-error">{mutationError}</p>}
+
+          {!isLoading && !loadError && groups.length === 0 && (
+            <p className="px-[33px] py-6 text-[13px] leading-5 text-gray-500">
+              관심그룹이 없어요. 그룹을 추가해 관심종목을 모아보세요.
+            </p>
+          )}
+          {activeGroup && activeGroup.items.length === 0 && (
+            <p className="px-[33px] py-6 text-[13px] leading-5 text-gray-500">
+              이 그룹에 담긴 관심종목이 없어요.
+            </p>
+          )}
+
+          <div className="pl-[33px] pr-[16px] flex flex-col gap-7">
+            {activeGroup?.items.map((item) => {
+              const summary = summaries[item.ticker]
+              const hasSummary = Boolean(summary)
+              const isPositive = (summary?.changeRate ?? 0) >= 0
+
+              return (
+                <div
+                  key={item.itemId}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => navigate(`/stock/${encodeURIComponent(item.ticker)}`)}
+                  onKeyDown={(e) => {
+                    if (e.target !== e.currentTarget) return
+                    if (e.key === 'Enter') navigate(`/stock/${encodeURIComponent(item.ticker)}`)
+                  }}
+                  className="flex items-center gap-3 cursor-pointer"
+                >
+                  <div className="flex-1 flex flex-col gap-1 min-w-0">
+                    <span className="text-[15px] font-semibold leading-6 text-gray-900 truncate">
+                      {summary?.stockName ?? item.ticker}
+                    </span>
+                    {isSummariesLoading && !summary ? (
+                      <div className="flex items-center gap-2">
+                        <Skeleton className="h-5 w-20" />
+                        <Skeleton className="h-5 w-12" />
+                      </div>
+                    ) : (
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-[12px] leading-5 text-[#2B2B2B] tabular-nums font-light">
+                          {summary ? formatPrice(summary.currentPriceKrw) : '시세 정보 없음'}
+                        </span>
+                        {hasSummary && summary && (
+                          <span
+                            className={`text-[12px] leading-5 tabular-nums font-light ${
+                              isPositive ? 'text-toss-red' : 'text-[#3985FF]'
+                            }`}
+                          >
+                            {formatChangeRate(summary.changeRate)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void handleRemoveStock(item)
+                    }}
+                    disabled={isMutationPending}
+                    className="w-5 h-5 flex items-center justify-center text-gray-400 shrink-0 disabled:opacity-50"
+                    aria-label="제거"
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    >
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
 
       {modalState !== 'closed' && (
         <>
