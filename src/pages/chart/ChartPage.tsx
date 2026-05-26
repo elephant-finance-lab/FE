@@ -397,12 +397,20 @@ export default function ChartPage() {
                 role={ticker ? 'button' : undefined}
                 tabIndex={ticker ? 0 : undefined}
                 onClick={() => {
-                  if (ticker) navigate(`/stock/${encodeURIComponent(ticker)}`)
+                  if (ticker) {
+                    navigate(`/stock/${encodeURIComponent(ticker)}`, {
+                      state: { stockName: stock.stockName ?? ticker },
+                    })
+                  }
                 }}
                 onKeyDown={(e) => {
                   if (!ticker) return
                   if (e.target !== e.currentTarget) return
-                  if (e.key === 'Enter') navigate(`/stock/${encodeURIComponent(ticker)}`)
+                  if (e.key === 'Enter') {
+                    navigate(`/stock/${encodeURIComponent(ticker)}`, {
+                      state: { stockName: stock.stockName ?? ticker },
+                    })
+                  }
                 }}
                 className={`flex items-center gap-[17px] ${ticker ? 'cursor-pointer' : ''}`}
               >
