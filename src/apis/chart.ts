@@ -15,6 +15,8 @@ export interface MarketIndexes {
   kosdaq: MarketIndex | null
 }
 
+export const MARKET_INDEX_TOPIC = '/topic/market-indexes'
+
 export interface RankingItem {
   rank: number
   tickerCode: string | null
@@ -55,6 +57,12 @@ async function chartRequest<T>(path: string) {
 
 export function getMarketIndexes() {
   return chartRequest<MarketIndexes>('/api/chart/market')
+}
+
+export function getMarketIndexWebSocketUrl() {
+  const url = new URL(buildApiUrl('/ws'), window.location.origin)
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  return url.toString()
 }
 
 export function getStockRanking(type: RankingType) {
