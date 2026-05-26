@@ -1,8 +1,46 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getMarketIndexes, type MarketIndex, type MarketIndexes } from '../apis/chart'
+import { Client } from '@stomp/stompjs'
+import {
+  getMarketIndexes,
+  getMarketIndexWebSocketUrl,
+  MARKET_INDEX_TOPIC,
+  type MarketIndex,
+  type MarketIndexes,
+} from '../apis/chart'
 
-const MARKET_REFRESH_INTERVAL_MS = 30_000
+const MARKET_FALLBACK_REFRESH_INTERVAL_MS = 30_000
+
+function latestIndex(current: MarketIndex | null, candidate: MarketIndex | null) {
+  if (!candidate) return current
+  if (!current || candidate.timestamp >= current.timestamp) return candidate
+  return current
+}
+
+function mergeMarketIndexes(current: MarketIndexes | null, candidate: MarketIndexes): MarketIndexes {
+  return {
+    kospi: latestIndex(current?.kospi ?? null, candidate.kospi),
+    kosdaq: latestIndex(current?.kosdaq ?? null, candidate.kosdaq),
+  }
+}
+
+function parseMarketIndexUpdate(body: string): MarketIndex | null {
+  try {
+    const index = JSON.parse(body) as Partial<MarketIndex>
+    if (
+      (index.market !== 'KOSPI' && index.market !== 'KOSDAQ') ||
+      typeof index.value !== 'number' ||
+      typeof index.change !== 'number' ||
+      typeof index.changeRate !== 'number' ||
+      typeof index.timestamp !== 'string'
+    ) {
+      return null
+    }
+    return index as MarketIndex
+  } catch {
+    return null
+  }
+}
 
 function formatNumber(value: number) {
   if (!Number.isFinite(value)) return '-'
@@ -57,7 +95,7 @@ export default function TopBar() {
     try {
       const nextIndexes = await getMarketIndexes()
       if (requestId !== requestIdRef.current) return
-      setIndexes(nextIndexes)
+      setIndexes((current) => mergeMarketIndexes(current, nextIndexes))
       setHasError(false)
     } catch {
       if (requestId !== requestIdRef.current) return
@@ -69,20 +107,44 @@ export default function TopBar() {
     }
   }, [])
 
+  const applyMarketIndexUpdate = useCallback((index: MarketIndex) => {
+    const update: MarketIndexes = {
+      kospi: index.market === 'KOSPI' ? index : null,
+      kosdaq: index.market === 'KOSDAQ' ? index : null,
+    }
+    setIndexes((current) => mergeMarketIndexes(current, update))
+    setHasError(false)
+    setIsLoading(false)
+  }, [])
+
   useEffect(() => {
     const initialTimer = window.setTimeout(() => {
       void loadMarketIndexes(true)
     }, 0)
     const refreshTimer = window.setInterval(() => {
       void loadMarketIndexes(false)
-    }, MARKET_REFRESH_INTERVAL_MS)
+    }, MARKET_FALLBACK_REFRESH_INTERVAL_MS)
+    const client = new Client({
+      brokerURL: getMarketIndexWebSocketUrl(),
+      reconnectDelay: 5_000,
+      heartbeatIncoming: 10_000,
+      heartbeatOutgoing: 10_000,
+      onConnect: () => {
+        client.subscribe(MARKET_INDEX_TOPIC, (message) => {
+          const index = parseMarketIndexUpdate(message.body)
+          if (index) applyMarketIndexUpdate(index)
+        })
+      },
+    })
+    client.activate()
 
     return () => {
       window.clearTimeout(initialTimer)
       window.clearInterval(refreshTimer)
       requestIdRef.current += 1
+      void client.deactivate()
     }
-  }, [loadMarketIndexes])
+  }, [applyMarketIndexUpdate, loadMarketIndexes])
 
   return (
     <header className="px-[20px] pt-[20px] pb-[18px] bg-white">
