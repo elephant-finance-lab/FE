@@ -134,9 +134,17 @@ export function getStockWebSocketUrl() {
 }
 
 export function getStockPriceTopic(ticker: string) {
-  return `/topic/stocks/${ticker.trim().toUpperCase()}/price`
+  const normalizedTicker = ticker.trim().toUpperCase()
+  if (!normalizedTicker) {
+    throw new Error('ticker is required to create stock price topic')
+  }
+  return `/topic/stocks/${normalizedTicker}/price`
 }
 
 export function getStockChartTopic(ticker: string) {
-  return `/topic/stocks/${ticker.trim().toUpperCase()}/chart`
+  const normalizedTicker = ticker.trim().toUpperCase()
+  if (!normalizedTicker) {
+    throw new Error('ticker is required to create stock chart topic')
+  }
+  return `/topic/stocks/${normalizedTicker}/chart`
 }

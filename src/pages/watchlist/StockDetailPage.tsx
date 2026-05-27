@@ -308,8 +308,12 @@ function FinancialBarChart({
       .map((value) => Math.abs(value)),
   )
   const latest = data[data.length - 1]
-  const height = (value: number | null) =>
-    validNumber(value) && maximum > 0 ? `${Math.max(3, (Math.abs(value) / maximum) * 100)}%` : '0%'
+  const barHeight = (value: number | null) =>
+    validNumber(value) && maximum > 0 ? `${Math.max(3, (Math.abs(value) / maximum) * 50)}%` : '0%'
+  const barClassName = (value: number | null, color: string) =>
+    `absolute left-0 w-[10px] rounded-sm ${color} ${
+      validNumber(value) && value < 0 ? 'top-1/2 rounded-t-none' : 'bottom-1/2 rounded-b-none'
+    }`
 
   if (isLoading) {
     return (
@@ -364,12 +368,19 @@ function FinancialBarChart({
   return (
     <div className="mt-6">
       <div className="relative pl-1">
-        <div className="flex items-end justify-between h-[150px]">
+        <div className="absolute left-0 right-0 top-1/2 h-px bg-gray-100" aria-hidden="true" />
+        <div className="flex justify-between h-[150px]">
           {data.map((point) => (
-            <div key={point.label} className="flex items-end gap-[3px] h-full justify-center">
-              <div className="w-[10px] bg-[#D9D9D9] rounded-sm" style={{ height: height(point.revenue) }} />
-              <div className="w-[10px] bg-[#A3D977] rounded-sm" style={{ height: height(point.operating) }} />
-              <div className="w-[10px] bg-[#F4C84A] rounded-sm" style={{ height: height(point.net) }} />
+            <div key={point.label} className="flex gap-[3px] h-full justify-center">
+              <div className="relative h-full w-[10px]">
+                <div className={barClassName(point.revenue, 'bg-[#D9D9D9]')} style={{ height: barHeight(point.revenue) }} />
+              </div>
+              <div className="relative h-full w-[10px]">
+                <div className={barClassName(point.operating, 'bg-[#A3D977]')} style={{ height: barHeight(point.operating) }} />
+              </div>
+              <div className="relative h-full w-[10px]">
+                <div className={barClassName(point.net, 'bg-[#F4C84A]')} style={{ height: barHeight(point.net) }} />
+              </div>
             </div>
           ))}
         </div>
@@ -428,7 +439,12 @@ export default function StockDetailPage() {
   const isFundLikeProduct = mayLackCorporateFinancials(summary?.stockName ?? fallbackName)
 
   const loadSummary = useCallback(async () => {
-    if (!ticker) return
+    if (!ticker) {
+      setSummaryLoading(false)
+      setSummaryError(true)
+      setSummaryErrorCode(null)
+      return
+    }
     setSummaryLoading(true)
     setSummaryError(false)
     setSummaryErrorCode(null)
@@ -482,7 +498,12 @@ export default function StockDetailPage() {
   }, [periodMenuOpen])
 
   useEffect(() => {
-    if (!ticker || activeTab !== '차트') return
+    if (!ticker) {
+      setChartLoading(false)
+      setChartError(true)
+      return
+    }
+    if (activeTab !== '차트') return
     let current = true
     const timer = window.setTimeout(() => {
       setChartLoading(true)
@@ -509,7 +530,14 @@ export default function StockDetailPage() {
   }, [activePeriod, activeTab, chartType, ticker])
 
   useEffect(() => {
-    if (!ticker || activeTab !== '종목정보') return
+    if (!ticker) {
+      setInfoLoading(false)
+      setFinancialLoading(false)
+      setInfoError(true)
+      setFinancialError(true)
+      return
+    }
+    if (activeTab !== '종목정보') return
     let current = true
     const timer = window.setTimeout(() => {
       setInfo(null)
@@ -518,32 +546,34 @@ export default function StockDetailPage() {
       setFinancialLoading(true)
       setInfoError(false)
       setFinancialError(false)
-      void (async () => {
-        try {
-          const nextInfo = await getStockInfo(ticker, financialPeriod)
+      void getStockInfo(ticker, financialPeriod)
+        .then((nextInfo) => {
           if (current) setInfo(nextInfo)
-        } catch {
+        })
+        .catch(() => {
           if (current) setInfoError(true)
-        } finally {
+        })
+        .finally(() => {
           if (current) setInfoLoading(false)
-        }
-        if (isFundLikeProduct) {
-          if (current) {
-            setFinancial(null)
-            setFinancialError(false)
-            setFinancialLoading(false)
-          }
-          return
-        }
-        try {
-          const nextFinancial = await getStockFinancial(ticker, 'INCOME', financialPeriod)
+        })
+
+      if (isFundLikeProduct) {
+        setFinancial(null)
+        setFinancialError(false)
+        setFinancialLoading(false)
+        return
+      }
+
+      void getStockFinancial(ticker, 'INCOME', financialPeriod)
+        .then((nextFinancial) => {
           if (current) setFinancial(nextFinancial)
-        } catch {
+        })
+        .catch(() => {
           if (current) setFinancialError(true)
-        } finally {
+        })
+        .finally(() => {
           if (current) setFinancialLoading(false)
-        }
-      })()
+        })
     }, 0)
     return () => {
       current = false
@@ -586,9 +616,12 @@ export default function StockDetailPage() {
   const linePoints = useMemo(() => lineData(chart), [chart])
   const candlePoints = useMemo(() => candlestickData(chart), [chart])
   const chartPointCount = chartType === 'area' ? linePoints.length : candlePoints.length
-  const chartPrices = (chart?.data ?? [])
-    .map((point) => point.price ?? point.close)
-    .filter(validNumber)
+  const chartPrices = (chart?.data ?? []).flatMap((point) => {
+    if (chartType === 'candlestick') {
+      return [point.high, point.low].filter(validNumber)
+    }
+    return [point.price ?? point.close].filter(validNumber)
+  })
   const highPrice = chartPrices.length > 0 ? Math.max(...chartPrices) : null
   const lowPrice = chartPrices.length > 0 ? Math.min(...chartPrices) : null
   const price = info?.price
@@ -778,7 +811,7 @@ export default function StockDetailPage() {
                   {[
                     { label: '시가', value: formatWon(price?.openPriceKrw) },
                     { label: '거래량', value: formatVolume(price?.volume) },
-                    { label: '현재가', value: formatWon(price?.currentPriceKrw) },
+                    { label: '현재가', value: formatWon(summary?.currentPriceKrw ?? price?.currentPriceKrw) },
                     { label: '거래대금', value: formatTradingValue(price?.tradingValueKrw) },
                   ].map((stat) => (
                     <div key={stat.label} className="flex items-center justify-between">

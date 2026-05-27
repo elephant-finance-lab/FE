@@ -406,7 +406,8 @@ export default function ChartPage() {
                 onKeyDown={(e) => {
                   if (!ticker) return
                   if (e.target !== e.currentTarget) return
-                  if (e.key === 'Enter') {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
                     navigate(`/stock/${encodeURIComponent(ticker)}`, {
                       state: { stockName: stock.stockName ?? ticker },
                     })

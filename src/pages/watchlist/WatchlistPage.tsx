@@ -441,7 +441,10 @@ export default function WatchlistPage() {
                   onClick={() => navigate(`/stock/${encodeURIComponent(item.ticker)}`)}
                   onKeyDown={(e) => {
                     if (e.target !== e.currentTarget) return
-                    if (e.key === 'Enter') navigate(`/stock/${encodeURIComponent(item.ticker)}`)
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      navigate(`/stock/${encodeURIComponent(item.ticker)}`)
+                    }
                   }}
                   className="flex items-center gap-3 cursor-pointer"
                 >

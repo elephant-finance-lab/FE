@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation, useParams } from 'react-router-dom'
 import {
   getStockFinancial,
+  getStockSummary,
   type StockFinancial,
   type StockFinancialPeriod,
   type StockFinancialStatement,
@@ -135,6 +136,7 @@ export default function FinancialsPage() {
   const [period, setPeriod] = useState<StockFinancialPeriod>('QUARTER')
   const [periodMenuOpen, setPeriodMenuOpen] = useState(false)
   const [financial, setFinancial] = useState<StockFinancial | null>(null)
+  const [summaryName, setSummaryName] = useState<{ ticker: string; name: string } | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
   const periodMenuRef = useRef<HTMLDivElement | null>(null)
@@ -151,26 +153,47 @@ export default function FinancialsPage() {
   }, [periodMenuOpen])
 
   useEffect(() => {
-    if (!ticker) return
+    if (!ticker) {
+      setIsLoading(false)
+      setHasError(true)
+      setFinancial(null)
+      setSummaryName(null)
+      return
+    }
     let current = true
     const timer = window.setTimeout(() => {
       setIsLoading(true)
       setHasError(false)
       setFinancial(null)
-      if (navigationName && mayLackCorporateFinancials(navigationName)) {
-        setIsLoading(false)
-        return
-      }
-      void getStockFinancial(ticker, activeTab, period)
-        .then((result) => {
-          if (current) setFinancial(result)
-        })
-        .catch(() => {
-          if (current) setHasError(true)
-        })
-        .finally(() => {
+      void (async () => {
+        let stockName = navigationName ?? null
+        if (!navigationName && current) {
+          setSummaryName(null)
+        }
+        if (!stockName) {
+          try {
+            const summary = await getStockSummary(ticker)
+            stockName = summary.stockName
+            if (current) setSummaryName({ ticker, name: summary.stockName })
+          } catch {
+            if (current) setSummaryName(null)
+          }
+        }
+
+        if (stockName && mayLackCorporateFinancials(stockName)) {
           if (current) setIsLoading(false)
-        })
+          return
+        }
+
+        try {
+          const result = await getStockFinancial(ticker, activeTab, period)
+          if (current) setFinancial(result)
+        } catch {
+          if (current) setHasError(true)
+        } finally {
+          if (current) setIsLoading(false)
+        }
+      })()
     }, 0)
     return () => {
       current = false
@@ -179,7 +202,8 @@ export default function FinancialsPage() {
   }, [activeTab, navigationName, period, ticker])
 
   const selectedPeriod = financialPeriods.find((item) => item.value === period)?.label ?? '분기'
-  const displayName = financial?.nameKor ?? navigationName ?? ticker
+  const resolvedSummaryName = summaryName?.ticker === ticker ? summaryName.name : null
+  const displayName = financial?.nameKor ?? navigationName ?? resolvedSummaryName ?? ticker
   const isFundLikeProduct = mayLackCorporateFinancials(displayName)
 
   return (
