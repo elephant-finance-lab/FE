@@ -498,14 +498,14 @@ export default function StockDetailPage() {
   }, [periodMenuOpen])
 
   useEffect(() => {
-    if (!ticker) {
-      setChartLoading(false)
-      setChartError(true)
-      return
-    }
     if (activeTab !== '차트') return
     let current = true
     const timer = window.setTimeout(() => {
+      if (!ticker) {
+        setChartLoading(false)
+        setChartError(true)
+        return
+      }
       setChartLoading(true)
       setChartError(false)
       const apiType: StockChartType = chartType === 'area' ? 'LINE' : 'CANDLE'
@@ -530,16 +530,16 @@ export default function StockDetailPage() {
   }, [activePeriod, activeTab, chartType, ticker])
 
   useEffect(() => {
-    if (!ticker) {
-      setInfoLoading(false)
-      setFinancialLoading(false)
-      setInfoError(true)
-      setFinancialError(true)
-      return
-    }
     if (activeTab !== '종목정보') return
     let current = true
     const timer = window.setTimeout(() => {
+      if (!ticker) {
+        setInfoLoading(false)
+        setFinancialLoading(false)
+        setInfoError(true)
+        setFinancialError(true)
+        return
+      }
       setInfo(null)
       setFinancial(null)
       setInfoLoading(true)

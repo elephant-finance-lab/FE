@@ -153,15 +153,15 @@ export default function FinancialsPage() {
   }, [periodMenuOpen])
 
   useEffect(() => {
-    if (!ticker) {
-      setIsLoading(false)
-      setHasError(true)
-      setFinancial(null)
-      setSummaryName(null)
-      return
-    }
     let current = true
     const timer = window.setTimeout(() => {
+      if (!ticker) {
+        setIsLoading(false)
+        setHasError(true)
+        setFinancial(null)
+        setSummaryName(null)
+        return
+      }
       setIsLoading(true)
       setHasError(false)
       setFinancial(null)
