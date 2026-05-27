@@ -34,12 +34,7 @@ export default function MyPage() {
   return (
     <div className="pb-10">
       <div className="pt-[68px] pb-7 flex flex-col items-center gap-[15px]">
-        <div className="w-[59px] h-[59px] rounded-full bg-gray-200 overflow-hidden flex items-center justify-center">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9E9E9E" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
-            <circle cx="12" cy="7" r="4" />
-          </svg>
-        </div>
+        <img src="/logo.png" alt="" className="w-[59px] h-[59px] object-contain" />
         <p className="text-[18px] font-semibold leading-6 text-gray-900">{displayName}</p>
       </div>
 
