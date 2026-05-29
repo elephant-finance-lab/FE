@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import {
+  getActiveAutoTradingSession,
   getRunningAutoTradingSession,
+  isActiveAutoTradingStatus,
   stopAutoTradingSession,
   type AutoTradingSession,
 } from '../../apis/autoTrading'
@@ -278,9 +280,9 @@ export default function RecommendPage() {
     setStopError(null)
     try {
       await stopAutoTradingSession(activeSession.sessionId)
-      const runningSession = await getRunningAutoTradingSession()
-      if (runningSession) {
-        setActiveSession(runningSession)
+      const activeSessionAfterStop = await getActiveAutoTradingSession()
+      if (isActiveAutoTradingStatus(activeSessionAfterStop?.status)) {
+        setActiveSession(activeSessionAfterStop)
         setStopError('자동매매 중단 요청을 처리 중입니다. 중단된 뒤 다시 선택해주세요.')
         return
       }

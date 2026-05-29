@@ -29,6 +29,8 @@ interface RecommendRouteState {
 
 type DetailSectionKey = keyof NonNullable<RecommendationDetail['sections']>
 
+const timeZoneSuffixPattern = /(?:Z|[+-]\d{2}:?\d{2})$/i
+
 interface SectionContext {
   stockName: string
   stockCode: string
@@ -145,8 +147,52 @@ function sectionText(
 
 function toChartTime(time: string): string | UTCTimestamp {
   if (!time.includes('T')) return time
-  const timestamp = Date.parse(`${time}+09:00`)
+  const normalizedTime = timeZoneSuffixPattern.test(time) ? time : `${time}+09:00`
+  const timestamp = Date.parse(normalizedTime)
   return Number.isFinite(timestamp) ? (Math.floor(timestamp / 1000) as UTCTimestamp) : time.slice(0, 10)
+}
+
+function mergeRecommendationSections(
+  base: RecommendationDetail['sections'],
+  update: RecommendationDetail['sections'],
+) {
+  if (!base && !update) return null
+
+  const merged: NonNullable<RecommendationDetail['sections']> = {
+    recommendReason: null,
+    companySummary: null,
+    growthPoint: null,
+    priceAttractiveness: null,
+    risk: null,
+    ...(base ?? {}),
+  }
+
+  Object.entries(update ?? {}).forEach(([key, value]) => {
+    if (value != null) {
+      merged[key as DetailSectionKey] = value
+    }
+  })
+
+  return merged
+}
+
+function mergeRecommendationDetail(
+  base: RecommendationDetail | null,
+  update: RecommendationDetail | null,
+) {
+  if (!base) return update
+  if (!update) return base
+
+  const merged = { ...base }
+  const mutableMerged = merged as Record<string, unknown>
+  Object.entries(update).forEach(([key, value]) => {
+    if (key !== 'sections' && value != null) {
+      mutableMerged[key] = value
+    }
+  })
+  merged.sections = mergeRecommendationSections(base.sections, update.sections)
+
+  return merged
 }
 
 function lineData(chart: StockChart | null) {
@@ -185,7 +231,7 @@ export default function RecommendDetailPage() {
   const [activeSession, setActiveSession] = useState<AutoTradingSession | null>(null)
   const [sessionCheckError, setSessionCheckError] = useState<string | null>(null)
 
-  const visibleDetail = reasons ?? detail
+  const visibleDetail = useMemo(() => mergeRecommendationDetail(detail, reasons), [detail, reasons])
   const currentStockCode = displayCode(visibleDetail, fallbackStockCode).trim()
   const chartData = useMemo(() => lineData(chart), [chart])
   const selectionPayload = useMemo<RecommendationSelectionItem | null>(() => {
