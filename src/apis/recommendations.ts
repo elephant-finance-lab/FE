@@ -31,6 +31,12 @@ export interface RecommendationList {
   modelVersion: string | null
   asof: string | null
   mode: string | null
+  cacheAgeSec: number | null
+  stale: boolean | null
+  staleReason: string | null
+  advisoryOnly: boolean | null
+  safeToEnableOrderActions: boolean | null
+  liveTradingAllowed: boolean | null
   recommendations: RecommendationInfo[] | null
 }
 

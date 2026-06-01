@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import {
+  getAutoTradingReadiness,
   getActiveAutoTradingSession,
   getRunningAutoTradingSession,
   isActiveAutoTradingStatus,
   stopAutoTradingSession,
+  type AutoTradingReadiness,
   type AutoTradingSession,
 } from '../../apis/autoTrading'
 import {
@@ -25,6 +27,10 @@ import {
   saveRunningAutoTradingState,
   type AutoTradingTarget,
 } from '../../lib/autoTradingStorage'
+import {
+  autoTradingReadinessMessage,
+  isPaperAutoTradingReady,
+} from '../../lib/autoTradingReadiness'
 
 function validNumber(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value)
@@ -82,6 +88,13 @@ function formatChangeRate(value: number | null | undefined) {
 function formatScore(value: number | null | undefined) {
   if (!validNumber(value)) return null
   return `AI 점수 ${value.toLocaleString('ko-KR', { maximumFractionDigits: 3 })}`
+}
+
+function formatCacheAgeSec(value: number | null | undefined) {
+  if (!validNumber(value)) return null
+  if (value < 60) return `${Math.floor(value)}초 전`
+  if (value < 3600) return `${Math.floor(value / 60)}분 전`
+  return `${Math.floor(value / 3600)}시간 전`
 }
 
 function SkeletonRow() {
@@ -154,6 +167,9 @@ export default function RecommendPage() {
   const [sessionError, setSessionError] = useState<string | null>(null)
   const [isStopping, setIsStopping] = useState(false)
   const [stopError, setStopError] = useState<string | null>(null)
+  const [readiness, setReadiness] = useState<AutoTradingReadiness | null>(null)
+  const [isCheckingReadiness, setIsCheckingReadiness] = useState(true)
+  const [readinessError, setReadinessError] = useState<string | null>(null)
 
   const recommendations = useMemo(
     () => recommendationList?.recommendations ?? [],
@@ -171,6 +187,25 @@ export default function RecommendPage() {
     [selectedStockInfo],
   )
   const hasSelectedStocks = selectedRecommendations.length > 0
+  const canStartAutoTrading = isPaperAutoTradingReady(readiness)
+  const cacheAgeText = formatCacheAgeSec(recommendationList?.cacheAgeSec)
+  const readinessNotice =
+    readinessError ||
+    (readiness && !canStartAutoTrading ? autoTradingReadinessMessage(readiness) : null)
+
+  const loadReadiness = useCallback(async () => {
+    setIsCheckingReadiness(true)
+    setReadinessError(null)
+    try {
+      const result = await getAutoTradingReadiness()
+      setReadiness(result)
+    } catch (loadError) {
+      setReadiness(null)
+      setReadinessError(errorMessage(loadError, 'AI 자동매매 준비 상태를 확인하지 못했습니다.'))
+    } finally {
+      setIsCheckingReadiness(false)
+    }
+  }, [])
 
   const loadRecommendations = useCallback(async () => {
     setIsLoading(true)
@@ -204,19 +239,22 @@ export default function RecommendPage() {
           if (session) {
             setActiveSession(session)
             setIsLoading(false)
+            setIsCheckingReadiness(false)
             return
           }
           setActiveSession(null)
+          void loadReadiness()
           return loadRecommendations()
         })
         .catch((loadError) => {
           setIsLoading(false)
+          setIsCheckingReadiness(false)
           setSessionError(errorMessage(loadError, '자동매매 실행 상태를 확인하지 못했습니다.'))
         })
         .finally(() => setIsCheckingSession(false))
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [loadRecommendations])
+  }, [loadRecommendations, loadReadiness])
 
   const toggleStock = (stock: RecommendationInfo) => {
     setSaveError(null)
@@ -238,6 +276,13 @@ export default function RecommendPage() {
       if (session) {
         setActiveSession(session)
         setStopError(null)
+        return
+      }
+      const latestReadiness = await getAutoTradingReadiness()
+      setReadiness(latestReadiness)
+      setReadinessError(null)
+      if (!isPaperAutoTradingReady(latestReadiness)) {
+        setSaveError(autoTradingReadinessMessage(latestReadiness))
         return
       }
       const payload =
@@ -289,6 +334,7 @@ export default function RecommendPage() {
       clearPendingAutoTradingSelection()
       clearRunningAutoTradingState()
       setActiveSession(null)
+      await loadReadiness()
       await loadRecommendations()
     } catch (stopRequestError) {
       setStopError(errorMessage(stopRequestError, 'AI 자동매매 중단에 실패했습니다. 잠시 후 다시 시도해주세요.'))
@@ -308,6 +354,13 @@ export default function RecommendPage() {
             {recommendationList?.userProfileSummary || '추천 모델 분석 결과'}
           </span>
         </div>
+        {recommendationList?.stale && (
+          <div className="mt-3 rounded-[10px] bg-gray-50 px-3 py-2">
+            <p className="text-[12px] leading-5 text-gray-500">
+              최근 추천 갱신을 기다리는 중입니다{cacheAgeText ? ` · ${cacheAgeText}` : ''}.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="px-6">
@@ -436,14 +489,31 @@ export default function RecommendPage() {
       </div>
 
       <div className="px-6 mt-8">
+        {!activeSession && readinessNotice && (
+          <p className="mb-3 text-[13px] leading-5 text-gray-500">{readinessNotice}</p>
+        )}
         {saveError && <p className="mb-3 text-[13px] leading-5 text-error">{saveError}</p>}
         <Button
           onClick={() => void handleConfirmSelection()}
-          disabled={!hasSelectedStocks || isSaving || isCheckingSession || Boolean(activeSession)}
-          variant={hasSelectedStocks ? 'primary' : 'secondary'}
+          disabled={
+            !hasSelectedStocks ||
+            isSaving ||
+            isCheckingSession ||
+            Boolean(activeSession) ||
+            isCheckingReadiness ||
+            Boolean(readinessError) ||
+            !canStartAutoTrading
+          }
+          variant={hasSelectedStocks && canStartAutoTrading ? 'primary' : 'secondary'}
           className="disabled:opacity-100"
         >
-          {isSaving ? '저장 중...' : '선택 종목 확인하기'}
+          {isSaving
+            ? '저장 중...'
+            : hasSelectedStocks && isCheckingReadiness
+              ? '준비 상태 확인 중...'
+              : hasSelectedStocks && !canStartAutoTrading
+                ? '자동매매 준비 중'
+                : '선택 종목 확인하기'}
         </Button>
       </div>
       {activeSession && (

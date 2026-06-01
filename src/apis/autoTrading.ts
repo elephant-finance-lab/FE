@@ -33,6 +33,22 @@ export interface AutoTradingAiStatus {
   status: string | null
 }
 
+export interface AutoTradingReadiness {
+  status: string | null
+  generatedAt: string | null
+  bundleId: string | null
+  deployQuality: string | null
+  brokerEvidence: string | null
+  liveTradingAllowed: boolean
+  registryMutated: boolean
+  safeToShowDashboard: boolean
+  safeToEnableOrderActions: boolean
+  safeToEnableLiveActions: boolean
+  canStartPaperAutoTrading: boolean
+  blockedReason: string | null
+  detailsJson: string | null
+}
+
 export interface StartAutoTradingRequest {
   recommendationIds: number[]
   purchaseOptionId: number
@@ -68,6 +84,10 @@ export function getAutoTradingAiStatus(sessionId: string) {
   return apiRequest<AutoTradingAiStatus>(
     `/api/auto-trading/sessions/${encodeURIComponent(sessionId)}/ai-status`,
   )
+}
+
+export function getAutoTradingReadiness() {
+  return apiRequest<AutoTradingReadiness>('/api/auto-trading/sessions/readiness')
 }
 
 export async function getRunningAutoTradingSession() {
