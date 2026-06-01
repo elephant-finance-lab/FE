@@ -21,7 +21,6 @@ import AccountRegisterPage from './pages/mypage/AccountRegisterPage'
 import AccountDeletePage from './pages/mypage/AccountDeletePage'
 import AccountLinkPage from './pages/mypage/AccountLinkPage'
 import AnalyzingPage from './pages/trade/AnalyzingPage'
-import TradeAmountPage from './pages/trade/TradeAmountPage'
 import TradeConfirmPage from './pages/trade/TradeConfirmPage'
 import TradeCompletePage from './pages/trade/TradeCompletePage'
 import NotificationPage from './pages/notification/NotificationPage'
@@ -57,7 +56,7 @@ const router = createBrowserRouter([
   { path: '/recommend/:id', element: protectedElement(<RecommendDetailPage />) },
   { path: '/notification', element: protectedElement(<NotificationPage />) },
   { path: '/trade/analyzing', element: protectedElement(<AnalyzingPage />) },
-  { path: '/trade/amount', element: protectedElement(<TradeAmountPage />) },
+  { path: '/trade/amount', element: <Navigate to="/trade/confirm" replace /> },
   { path: '/trade/confirm', element: protectedElement(<TradeConfirmPage />) },
   { path: '/trade/complete', element: protectedElement(<TradeCompletePage />) },
   { path: '/mypage/edit-profile', element: protectedElement(<EditProfilePage />) },
