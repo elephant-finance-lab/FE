@@ -2,7 +2,9 @@ import type { UTCTimestamp } from 'lightweight-charts'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
+  getAutoTradingReadiness,
   getRunningAutoTradingSession,
+  type AutoTradingReadiness,
   type AutoTradingSession,
 } from '../../apis/autoTrading'
 import {
@@ -22,6 +24,10 @@ import {
   createAutoTradingIdempotencyKey,
   savePendingAutoTradingSelection,
 } from '../../lib/autoTradingStorage'
+import {
+  autoTradingReadinessMessage,
+  isPaperAutoTradingReady,
+} from '../../lib/autoTradingReadiness'
 
 interface RecommendRouteState {
   stockCode?: string
@@ -37,7 +43,6 @@ interface SectionContext {
   price: number | null
   currency: string | null
   rank: number | null | undefined
-  scoreText: string | null
   riskLabel: string | null
 }
 
@@ -83,11 +88,6 @@ function formatPercent(value: number | null | undefined) {
   return `${value > 0 ? '+' : ''}${value.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}%`
 }
 
-function formatScore(value: number | null | undefined) {
-  if (!validNumber(value)) return null
-  return value.toLocaleString('ko-KR', { maximumFractionDigits: 3 })
-}
-
 function formatRiskLevel(level: string | null | undefined) {
   const normalized = String(level ?? '').trim().toLowerCase()
   if (!normalized) return null
@@ -122,8 +122,7 @@ function sectionText(
   if (key === 'recommendReason') {
     const reason = humanizeReason(detail?.recommendReason)
     const rankText = validNumber(context.rank) ? ` 추천 순위는 ${context.rank}위입니다.` : ''
-    const scoreText = context.scoreText ? ` 모델 점수는 ${context.scoreText}입니다.` : ''
-    return `${reason || 'AI 모델 추천 결과가 생성되었습니다.'}${rankText}${scoreText}`.trim()
+    return `${reason || 'AI 모델 추천 결과가 생성되었습니다.'}${rankText}`.trim()
   }
   if (key === 'companySummary') {
     return `${context.stockName}${context.stockCode ? `(${context.stockCode})` : ''}의 기본 정보는 아직 상세 데이터와 연결되지 않았습니다. 현재 화면은 AI 추천 결과와 시세 데이터를 기준으로 표시됩니다.`
@@ -230,6 +229,9 @@ export default function RecommendDetailPage() {
   const [isCheckingSession, setIsCheckingSession] = useState(true)
   const [activeSession, setActiveSession] = useState<AutoTradingSession | null>(null)
   const [sessionCheckError, setSessionCheckError] = useState<string | null>(null)
+  const [readiness, setReadiness] = useState<AutoTradingReadiness | null>(null)
+  const [isCheckingReadiness, setIsCheckingReadiness] = useState(true)
+  const [readinessError, setReadinessError] = useState<string | null>(null)
 
   const visibleDetail = useMemo(() => mergeRecommendationDetail(detail, reasons), [detail, reasons])
   const currentStockCode = displayCode(visibleDetail, fallbackStockCode).trim()
@@ -242,6 +244,10 @@ export default function RecommendDetailPage() {
     }
     return currentStockCode ? { stockCode: currentStockCode } : null
   }, [currentStockCode, visibleDetail])
+  const canStartAutoTrading = isPaperAutoTradingReady(readiness)
+  const readinessNotice =
+    readinessError ||
+    (canStartAutoTrading ? null : autoTradingReadinessMessage(readiness))
 
   const loadDetail = useCallback(async () => {
     if (recommendationId == null) {
@@ -361,6 +367,31 @@ export default function RecommendDetailPage() {
     }
   }, [])
 
+  useEffect(() => {
+    let current = true
+    const timer = window.setTimeout(() => {
+      setIsCheckingReadiness(true)
+      setReadinessError(null)
+      void getAutoTradingReadiness()
+        .then((result) => {
+          if (current) setReadiness(result)
+        })
+        .catch((readinessLoadError) => {
+          if (current) {
+            setReadiness(null)
+            setReadinessError(errorMessage(readinessLoadError, 'AI 자동매매 준비 상태를 확인하지 못했습니다.'))
+          }
+        })
+        .finally(() => {
+          if (current) setIsCheckingReadiness(false)
+        })
+    }, 0)
+    return () => {
+      current = false
+      window.clearTimeout(timer)
+    }
+  }, [])
+
   const handleSelectForAutoTrading = async () => {
     if (!selectionPayload || isSaving) return
     setIsSaving(true)
@@ -369,6 +400,13 @@ export default function RecommendDetailPage() {
       const session = await getRunningAutoTradingSession()
       if (session) {
         setActiveSession(session)
+        return
+      }
+      const latestReadiness = await getAutoTradingReadiness()
+      setReadiness(latestReadiness)
+      setReadinessError(null)
+      if (!isPaperAutoTradingReady(latestReadiness)) {
+        setSaveError(autoTradingReadinessMessage(latestReadiness))
         return
       }
       const result = await selectRecommendations(selectionPayload)
@@ -446,7 +484,6 @@ export default function RecommendDetailPage() {
   const resolvedCurrency = visibleDetail?.currency || chart?.currency || 'KRW'
   const changeRateValue = firstValidNumber(visibleDetail?.changeRate, summary?.changeRate)
   const changeRate = formatPercent(changeRateValue)
-  const score = formatScore(visibleDetail?.score)
   const riskLabel = formatRiskLevel(visibleDetail?.riskLevel)
   const context: SectionContext = {
     stockName: displayName(visibleDetail),
@@ -454,7 +491,6 @@ export default function RecommendDetailPage() {
     price: resolvedPrice,
     currency: resolvedCurrency,
     rank: visibleDetail?.rank,
-    scoreText: score,
     riskLabel,
   }
 
@@ -466,15 +502,10 @@ export default function RecommendDetailPage() {
 
       <div className="screen-header pt-4 pb-2">
         <h1 className="section-title">{displayName(visibleDetail)}</h1>
-        <p className="body-copy mt-2">
-          {currentStockCode ? `${currentStockCode} · AI 추천 상세` : 'AI 추천 상세'}
-        </p>
+        {currentStockCode && <p className="body-copy mt-2">{currentStockCode}</p>}
         <div className="mt-3 inline-flex max-w-full items-center gap-2 rounded-[10px] bg-toss-blue-light px-3 py-1.5">
           <span className="shrink-0 text-[13px] leading-5 font-medium text-toss-blue">
             {riskLabel ? `리스크 ${riskLabel}` : '추천 분석'}
-          </span>
-          <span className="min-w-0 truncate text-[12px] leading-5 text-gray-500">
-            {score ? `AI 점수 ${score}` : visibleDetail?.userProfileSummary || '사용자 성향 분석 결과'}
           </span>
         </div>
       </div>
@@ -522,18 +553,6 @@ export default function RecommendDetailPage() {
           <p>{sectionText(visibleDetail, 'recommendReason', context)}</p>
         </InfoCard>
 
-        <InfoCard title="기업 정보 요약">
-          <p>{sectionText(visibleDetail, 'companySummary', context)}</p>
-        </InfoCard>
-
-        <InfoCard title="성장성 & 투자 포인트">
-          <p>{sectionText(visibleDetail, 'growthPoint', context)}</p>
-        </InfoCard>
-
-        <InfoCard title="현재 가격 매력도">
-          <p>{sectionText(visibleDetail, 'priceAttractiveness', context)}</p>
-        </InfoCard>
-
         <InfoCard title="리스크">
           <p>{sectionText(visibleDetail, 'risk', context)}</p>
         </InfoCard>
@@ -556,12 +575,32 @@ export default function RecommendDetailPage() {
           </div>
         )}
         {sessionCheckError && <p className="mb-3 text-[13px] leading-5 text-error">{sessionCheckError}</p>}
+        {!activeSession && readinessNotice && (
+          <p className="mb-3 text-[13px] leading-5 text-gray-500">{readinessNotice}</p>
+        )}
         {saveError && <p className="mb-3 text-[13px] leading-5 text-error">{saveError}</p>}
         <Button
           onClick={() => void handleSelectForAutoTrading()}
-          disabled={!selectionPayload || isSaving || isCheckingSession || Boolean(activeSession) || Boolean(sessionCheckError)}
+          disabled={
+            !selectionPayload ||
+            isSaving ||
+            isCheckingSession ||
+            Boolean(activeSession) ||
+            Boolean(sessionCheckError) ||
+            isCheckingReadiness ||
+            Boolean(readinessError) ||
+            !canStartAutoTrading
+          }
         >
-          {isSaving ? '저장 중...' : activeSession ? 'AI 자동매매 실행 중' : '자동매매 대상으로 선택하기'}
+          {isSaving
+            ? '저장 중...'
+            : activeSession
+              ? 'AI 자동매매 실행 중'
+              : isCheckingReadiness
+                ? '준비 상태 확인 중...'
+                : !canStartAutoTrading
+                  ? '자동매매 준비 중'
+                  : '자동매매 대상으로 선택하기'}
         </Button>
       </div>
     </div>

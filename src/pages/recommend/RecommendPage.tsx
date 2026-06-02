@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import {
+  getAutoTradingReadiness,
   getActiveAutoTradingSession,
   getRunningAutoTradingSession,
   isActiveAutoTradingStatus,
   stopAutoTradingSession,
+  type AutoTradingReadiness,
   type AutoTradingSession,
 } from '../../apis/autoTrading'
 import {
@@ -15,6 +17,7 @@ import {
   type RecommendationList,
   type RecommendationSelectionItem,
 } from '../../apis/recommendations'
+import { getStockSummary, type StockSummary } from '../../apis/stocks'
 import Button from '../../components/Button'
 import {
   clearPendingAutoTradingSelection,
@@ -25,9 +28,17 @@ import {
   saveRunningAutoTradingState,
   type AutoTradingTarget,
 } from '../../lib/autoTradingStorage'
+import {
+  autoTradingReadinessMessage,
+  isPaperAutoTradingReady,
+} from '../../lib/autoTradingReadiness'
 
 function validNumber(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value)
+}
+
+function firstValidNumber(...values: Array<number | null | undefined>) {
+  return values.find(validNumber) ?? null
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -79,9 +90,11 @@ function formatChangeRate(value: number | null | undefined) {
   return `${value > 0 ? '+' : ''}${value.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}%`
 }
 
-function formatScore(value: number | null | undefined) {
+function formatCacheAgeSec(value: number | null | undefined) {
   if (!validNumber(value)) return null
-  return `AI 점수 ${value.toLocaleString('ko-KR', { maximumFractionDigits: 3 })}`
+  if (value < 60) return `${Math.floor(value)}초 전`
+  if (value < 3600) return `${Math.floor(value / 60)}분 전`
+  return `${Math.floor(value / 3600)}시간 전`
 }
 
 function SkeletonRow() {
@@ -145,6 +158,7 @@ export default function RecommendPage() {
   const navigate = useNavigate()
   const [recommendationList, setRecommendationList] = useState<RecommendationList | null>(null)
   const [selectedStocks, setSelectedStocks] = useState<Set<string>>(new Set())
+  const [priceSummaries, setPriceSummaries] = useState<Record<string, StockSummary | null>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -154,6 +168,9 @@ export default function RecommendPage() {
   const [sessionError, setSessionError] = useState<string | null>(null)
   const [isStopping, setIsStopping] = useState(false)
   const [stopError, setStopError] = useState<string | null>(null)
+  const [readiness, setReadiness] = useState<AutoTradingReadiness | null>(null)
+  const [isCheckingReadiness, setIsCheckingReadiness] = useState(true)
+  const [readinessError, setReadinessError] = useState<string | null>(null)
 
   const recommendations = useMemo(
     () => recommendationList?.recommendations ?? [],
@@ -171,14 +188,39 @@ export default function RecommendPage() {
     [selectedStockInfo],
   )
   const hasSelectedStocks = selectedRecommendations.length > 0
+  const canStartAutoTrading = isPaperAutoTradingReady(readiness)
+  const cacheAgeText = formatCacheAgeSec(recommendationList?.cacheAgeSec)
+  const readinessNotice =
+    readinessError ||
+    (canStartAutoTrading ? null : autoTradingReadinessMessage(readiness))
 
-  const loadRecommendations = useCallback(async () => {
+  const loadReadiness = useCallback(async (isCurrent: () => boolean = () => true) => {
+    if (!isCurrent()) return
+    setIsCheckingReadiness(true)
+    setReadinessError(null)
+    try {
+      const result = await getAutoTradingReadiness()
+      if (!isCurrent()) return
+      setReadiness(result)
+    } catch (loadError) {
+      if (!isCurrent()) return
+      setReadiness(null)
+      setReadinessError(errorMessage(loadError, 'AI 자동매매 준비 상태를 확인하지 못했습니다.'))
+    } finally {
+      if (isCurrent()) setIsCheckingReadiness(false)
+    }
+  }, [])
+
+  const loadRecommendations = useCallback(async (isCurrent: () => boolean = () => true) => {
+    if (!isCurrent()) return
     setIsLoading(true)
     setError(null)
     setSaveError(null)
     try {
       const result = await getRecommendations()
+      if (!isCurrent()) return
       setRecommendationList(result)
+      setPriceSummaries({})
       setSelectedStocks(
         new Set(
           (result.recommendations ?? [])
@@ -187,36 +229,77 @@ export default function RecommendPage() {
         ),
       )
     } catch (loadError) {
+      if (!isCurrent()) return
       setRecommendationList(null)
       setSelectedStocks(new Set())
+      setPriceSummaries({})
       setError(errorMessage(loadError, '추천 종목을 불러오지 못했습니다.'))
     } finally {
-      setIsLoading(false)
+      if (isCurrent()) setIsLoading(false)
     }
   }, [])
 
   useEffect(() => {
+    let current = true
     const timer = window.setTimeout(() => {
+      if (!current) return
       setIsCheckingSession(true)
       setSessionError(null)
       void getRunningAutoTradingSession()
         .then((session) => {
+          if (!current) return
           if (session) {
             setActiveSession(session)
             setIsLoading(false)
+            setIsCheckingReadiness(false)
             return
           }
           setActiveSession(null)
-          return loadRecommendations()
+          void loadReadiness(() => current)
+          return loadRecommendations(() => current)
         })
         .catch((loadError) => {
+          if (!current) return
           setIsLoading(false)
+          setIsCheckingReadiness(false)
           setSessionError(errorMessage(loadError, '자동매매 실행 상태를 확인하지 못했습니다.'))
         })
-        .finally(() => setIsCheckingSession(false))
+        .finally(() => {
+          if (current) setIsCheckingSession(false)
+        })
     }, 0)
-    return () => window.clearTimeout(timer)
-  }, [loadRecommendations])
+    return () => {
+      current = false
+      window.clearTimeout(timer)
+    }
+  }, [loadRecommendations, loadReadiness])
+
+  useEffect(() => {
+    const codes = Array.from(new Set(recommendations.map((stock) => stockCode(stock).trim()).filter(Boolean)))
+    let isCurrent = true
+
+    const timer = window.setTimeout(() => {
+      setPriceSummaries({})
+      if (codes.length === 0) return
+
+      void Promise.all(
+        codes.map(async (code) => {
+          try {
+            return [code, await getStockSummary(code)] as const
+          } catch {
+            return [code, null] as const
+          }
+        }),
+      ).then((results) => {
+        if (isCurrent) setPriceSummaries(Object.fromEntries(results))
+      })
+    }, 0)
+
+    return () => {
+      isCurrent = false
+      window.clearTimeout(timer)
+    }
+  }, [recommendations])
 
   const toggleStock = (stock: RecommendationInfo) => {
     setSaveError(null)
@@ -238,6 +321,13 @@ export default function RecommendPage() {
       if (session) {
         setActiveSession(session)
         setStopError(null)
+        return
+      }
+      const latestReadiness = await getAutoTradingReadiness()
+      setReadiness(latestReadiness)
+      setReadinessError(null)
+      if (!isPaperAutoTradingReady(latestReadiness)) {
+        setSaveError(autoTradingReadinessMessage(latestReadiness))
         return
       }
       const payload =
@@ -289,6 +379,7 @@ export default function RecommendPage() {
       clearPendingAutoTradingSelection()
       clearRunningAutoTradingState()
       setActiveSession(null)
+      await loadReadiness()
       await loadRecommendations()
     } catch (stopRequestError) {
       setStopError(errorMessage(stopRequestError, 'AI 자동매매 중단에 실패했습니다. 잠시 후 다시 시도해주세요.'))
@@ -308,6 +399,13 @@ export default function RecommendPage() {
             {recommendationList?.userProfileSummary || '추천 모델 분석 결과'}
           </span>
         </div>
+        {recommendationList?.stale && (
+          <div className="mt-3 rounded-[10px] bg-gray-50 px-3 py-2">
+            <p className="text-[12px] leading-5 text-gray-500">
+              최근 추천 갱신을 기다리는 중입니다{cacheAgeText ? ` · ${cacheAgeText}` : ''}.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="px-6">
@@ -365,10 +463,14 @@ export default function RecommendPage() {
             const key = recommendationKey(stock)
             const isSelected = selectedStocks.has(key)
             const detailId = stock.recommendationId
-            const changeRate = formatChangeRate(stock.changeRate)
-            const score = formatScore(stock.score)
+            const code = stockCode(stock).trim()
+            const priceSummary = code ? priceSummaries[code] : null
+            const resolvedPrice = firstValidNumber(stock.currentPrice, priceSummary?.currentPriceKrw)
+            const resolvedChangeRate = firstValidNumber(stock.changeRate, priceSummary?.changeRate)
+            const changeRate = formatChangeRate(resolvedChangeRate)
             const changeColor =
-              validNumber(stock.changeRate) && stock.changeRate < 0 ? 'text-[#3985FF]' : 'text-toss-red'
+              validNumber(resolvedChangeRate) && resolvedChangeRate < 0 ? 'text-[#3985FF]' : 'text-toss-red'
+            const isPriceLoading = Boolean(code && priceSummaries[code] === undefined && !validNumber(stock.currentPrice))
 
             return (
               <div
@@ -395,16 +497,18 @@ export default function RecommendPage() {
                 <div className="ml-4 min-w-0 flex-1">
                   <p className="truncate text-[15px] leading-6 font-medium text-gray-900">{stockName(stock)}</p>
                   <div className="mt-0.5 flex items-center gap-1">
-                    <span className="text-[13px] leading-5 font-normal text-gray-500 tabular-nums">
-                      {formatPrice(stock.currentPrice, stock.currency)}
-                    </span>
+                    {isPriceLoading ? (
+                      <span className="inline-block h-5 w-20 rounded bg-gray-100" aria-label="가격 정보 로딩 중" />
+                    ) : (
+                      <span className="text-[13px] leading-5 font-normal text-gray-500 tabular-nums">
+                        {formatPrice(resolvedPrice, stock.currency || 'KRW')}
+                      </span>
+                    )}
                     {changeRate ? (
                       <span className={`text-[12px] leading-4 font-medium tabular-nums ${changeColor}`}>
                         {changeRate}
                       </span>
-                    ) : (
-                      score && <span className="text-[12px] leading-4 font-medium text-gray-500">{score}</span>
-                    )}
+                    ) : null}
                   </div>
                 </div>
                 <button
@@ -436,14 +540,31 @@ export default function RecommendPage() {
       </div>
 
       <div className="px-6 mt-8">
+        {!activeSession && readinessNotice && (
+          <p className="mb-3 text-[13px] leading-5 text-gray-500">{readinessNotice}</p>
+        )}
         {saveError && <p className="mb-3 text-[13px] leading-5 text-error">{saveError}</p>}
         <Button
           onClick={() => void handleConfirmSelection()}
-          disabled={!hasSelectedStocks || isSaving || isCheckingSession || Boolean(activeSession)}
-          variant={hasSelectedStocks ? 'primary' : 'secondary'}
+          disabled={
+            !hasSelectedStocks ||
+            isSaving ||
+            isCheckingSession ||
+            Boolean(activeSession) ||
+            isCheckingReadiness ||
+            Boolean(readinessError) ||
+            !canStartAutoTrading
+          }
+          variant={hasSelectedStocks && canStartAutoTrading ? 'primary' : 'secondary'}
           className="disabled:opacity-100"
         >
-          {isSaving ? '저장 중...' : '선택 종목 확인하기'}
+          {isSaving
+            ? '저장 중...'
+            : hasSelectedStocks && isCheckingReadiness
+              ? '준비 상태 확인 중...'
+              : hasSelectedStocks && !canStartAutoTrading
+                ? '자동매매 준비 중'
+                : '선택 종목 확인하기'}
         </Button>
       </div>
       {activeSession && (

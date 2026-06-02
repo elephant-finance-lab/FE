@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   DEFAULT_AUTO_TRADING_SETTINGS,
+  getAutoTradingReadiness,
   getRunningAutoTradingSession,
   startAutoTradingSession,
+  type AutoTradingReadiness,
   type AutoTradingSession,
 } from '../../apis/autoTrading'
 import { getRecommendations, type RecommendationInfo } from '../../apis/recommendations'
@@ -18,6 +20,10 @@ import {
   type AutoTradingTarget,
   type PendingAutoTradingSelection,
 } from '../../lib/autoTradingStorage'
+import {
+  autoTradingReadinessMessage,
+  isPaperAutoTradingReady,
+} from '../../lib/autoTradingReadiness'
 
 interface TradeConfirmRouteState {
   selection?: PendingAutoTradingSelection
@@ -87,6 +93,14 @@ export default function TradeConfirmPage() {
   const [isStarting, setIsStarting] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [startError, setStartError] = useState<string | null>(null)
+  const [readiness, setReadiness] = useState<AutoTradingReadiness | null>(null)
+  const [isCheckingReadiness, setIsCheckingReadiness] = useState(true)
+  const [readinessError, setReadinessError] = useState<string | null>(null)
+
+  const canStartAutoTrading = isPaperAutoTradingReady(readiness)
+  const readinessNotice =
+    readinessError ||
+    (canStartAutoTrading ? null : autoTradingReadinessMessage(readiness))
 
   useEffect(() => {
     let current = true
@@ -99,6 +113,20 @@ export default function TradeConfirmPage() {
           if (!current) return
           if (session) {
             setActiveSession(session)
+            setIsCheckingReadiness(false)
+          } else {
+            try {
+              const readinessResult = await getAutoTradingReadiness()
+              if (!current) return
+              setReadiness(readinessResult)
+              setReadinessError(null)
+            } catch (readinessLoadError) {
+              if (!current) return
+              setReadiness(null)
+              setReadinessError(readinessLoadError instanceof Error ? readinessLoadError.message : 'AI 자동매매 준비 상태를 확인하지 못했습니다.')
+            } finally {
+              if (current) setIsCheckingReadiness(false)
+            }
           }
 
           let nextSelection = routeSelection ?? readPendingAutoTradingSelection()
@@ -114,6 +142,7 @@ export default function TradeConfirmPage() {
         } catch (error) {
           if (current) {
             setLoadError(error instanceof Error ? error.message : '선택된 종목을 불러오지 못했습니다.')
+            setIsCheckingReadiness(false)
           }
         } finally {
           if (current) setIsLoading(false)
@@ -136,6 +165,13 @@ export default function TradeConfirmPage() {
       if (currentSession) {
         setActiveSession(currentSession)
         setStartError('이미 실행 중인 AI 자동매매가 있습니다.')
+        return
+      }
+      const latestReadiness = await getAutoTradingReadiness()
+      setReadiness(latestReadiness)
+      setReadinessError(null)
+      if (!isPaperAutoTradingReady(latestReadiness)) {
+        setStartError(autoTradingReadinessMessage(latestReadiness))
         return
       }
       const session = await startAutoTradingSession(
@@ -226,6 +262,12 @@ export default function TradeConfirmPage() {
           </div>
         )}
 
+        {!activeSession && readinessNotice && (
+          <div className="mt-4 rounded-[15px] bg-gray-50 px-5 py-4 text-[14px] leading-6 text-gray-600">
+            {readinessNotice}
+          </div>
+        )}
+
         <div className="mt-5 space-y-1 text-[13px] leading-5 text-gray-400">
           <p>자동매매는 시장 상황과 모델 판단에 따라 체결되지 않을 수 있습니다.</p>
           <p>체결 내역은 실행 이후 포트폴리오에서 확인할 수 있습니다.</p>
@@ -236,9 +278,26 @@ export default function TradeConfirmPage() {
         {startError && <p className="text-[13px] leading-5 text-error">{startError}</p>}
         <Button
           onClick={() => void handleStart()}
-          disabled={isLoading || Boolean(loadError) || !selection || Boolean(activeSession) || isStarting}
+          disabled={
+            isLoading ||
+            Boolean(loadError) ||
+            !selection ||
+            Boolean(activeSession) ||
+            isStarting ||
+            isCheckingReadiness ||
+            Boolean(readinessError) ||
+            !canStartAutoTrading
+          }
         >
-          {isStarting ? '시작 중...' : 'AI 자동매매 시작'}
+          {isStarting
+            ? '시작 중...'
+            : activeSession
+              ? 'AI 자동매매 실행 중'
+            : isCheckingReadiness
+              ? '준비 상태 확인 중...'
+              : !canStartAutoTrading
+                ? '자동매매 준비 중'
+                : 'AI 자동매매 시작'}
         </Button>
         <Button variant="secondary" onClick={() => navigate('/recommend')}>
           취소

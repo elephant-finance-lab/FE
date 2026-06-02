@@ -6,11 +6,24 @@ const mainTabs = ['총 투자 자산', '내 거래 기록'] as const
 const tradeTabs = ['매수', '매도'] as const
 const allocationColors = ['bg-[#1F6FEB]', 'bg-[#6BA8FF]', 'bg-[#DCEBFF]']
 const allocationWidths = ['62%', '30%', '8%']
+const PAGE_SIZE = 3
+
+function formatSignedPercent(changePercent: string, isPositive: boolean) {
+  const normalizedPercent = changePercent.trim().replace(/^[+-]/, '')
+  if (!normalizedPercent) return ''
+  return `${isPositive ? '+' : '-'}${normalizedPercent}`
+}
 
 export default function PortfolioPage() {
   const navigate = useNavigate()
   const [activeMainTab, setActiveMainTab] = useState<(typeof mainTabs)[number]>(mainTabs[0])
   const [activeTradeTab, setActiveTradeTab] = useState<(typeof tradeTabs)[number]>(tradeTabs[0])
+  const [visibleHoldingsCount, setVisibleHoldingsCount] = useState(PAGE_SIZE)
+  const [visibleTradeHistoryCount, setVisibleTradeHistoryCount] = useState(PAGE_SIZE)
+  const visibleHoldings = portfolioHoldings.slice(0, visibleHoldingsCount)
+  const visibleTradeHistory = tradeHistory.slice(0, visibleTradeHistoryCount)
+  const hasMoreHoldings = visibleHoldingsCount < portfolioHoldings.length
+  const hasMoreTradeHistory = visibleTradeHistoryCount < tradeHistory.length
 
   return (
     <div className="pb-10">
@@ -58,7 +71,7 @@ export default function PortfolioPage() {
           </div>
 
           <div className="px-6 mt-4 flex flex-col">
-            {portfolioHoldings.map((h, idx) => (
+            {visibleHoldings.map((h, idx) => (
               <div
                 key={`${h.name}-${idx}`}
                 onClick={() => navigate(`/stock/${idx}`)}
@@ -73,22 +86,29 @@ export default function PortfolioPage() {
                 </div>
                 <div className="text-right">
                   <p className="text-[14px] font-semibold leading-5 text-gray-900 tabular-nums">{h.value}</p>
-                  <p className={`text-[11px] font-medium leading-4 tabular-nums ${h.isPositive ? 'text-toss-red' : 'text-toss-blue'}`}>
-                    +({h.changePercent})
+                  <p
+                    className={`text-[11px] font-medium leading-4 tabular-nums ${
+                      h.isPositive ? 'text-toss-red' : 'text-toss-blue'
+                    }`}
+                  >
+                    {formatSignedPercent(h.changePercent, h.isPositive)}
                   </p>
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="mx-6 mt-3 border-t border-gray-200 py-4 flex justify-center">
-            <button
-              type="button"
-              className="px-3 py-1.5 text-[15px] font-light leading-6 text-gray-900 active:text-gray-500 transition-colors"
-            >
-              더 보기
-            </button>
-          </div>
+          {hasMoreHoldings && (
+            <div className="mx-6 mt-3 border-t border-gray-200 py-4 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setVisibleHoldingsCount((count) => Math.min(count + PAGE_SIZE, portfolioHoldings.length))}
+                className="px-3 py-1.5 text-[15px] font-light leading-6 text-gray-900 active:text-gray-500 transition-colors"
+              >
+                더 보기
+              </button>
+            </div>
+          )}
 
           <div className="mt-4">
             <button
@@ -128,7 +148,7 @@ export default function PortfolioPage() {
         </div>
 
           <div className="mt-5 flex flex-col gap-4">
-            {tradeHistory.concat(tradeHistory.slice(0, 2)).map((t, idx) => (
+            {visibleTradeHistory.map((t, idx) => (
               <div key={`${t.name}-${idx}`} className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <div className="w-[33px] h-[33px] rounded-full bg-[#D9D9D9] shrink-0" />
@@ -142,14 +162,17 @@ export default function PortfolioPage() {
             ))}
           </div>
 
-          <div className="mt-8 border-t border-gray-200 py-5 flex justify-center">
-            <button
-              type="button"
-              className="px-3 py-1.5 text-[15px] font-light leading-6 text-gray-900 active:text-gray-500 transition-colors"
-            >
-              더 보기
-            </button>
-          </div>
+          {hasMoreTradeHistory && (
+            <div className="mt-8 border-t border-gray-200 py-5 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setVisibleTradeHistoryCount((count) => Math.min(count + PAGE_SIZE, tradeHistory.length))}
+                className="px-3 py-1.5 text-[15px] font-light leading-6 text-gray-900 active:text-gray-500 transition-colors"
+              >
+                더 보기
+              </button>
+            </div>
+          )}
         </section>
       )}
     </div>
