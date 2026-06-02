@@ -17,6 +17,7 @@ import {
   type RecommendationList,
   type RecommendationSelectionItem,
 } from '../../apis/recommendations'
+import { getStockSummary, type StockSummary } from '../../apis/stocks'
 import Button from '../../components/Button'
 import {
   clearPendingAutoTradingSelection,
@@ -34,6 +35,10 @@ import {
 
 function validNumber(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value)
+}
+
+function firstValidNumber(...values: Array<number | null | undefined>) {
+  return values.find(validNumber) ?? null
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -83,11 +88,6 @@ function formatPrice(value: number | null | undefined, currency: string | null |
 function formatChangeRate(value: number | null | undefined) {
   if (!validNumber(value)) return null
   return `${value > 0 ? '+' : ''}${value.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}%`
-}
-
-function formatScore(value: number | null | undefined) {
-  if (!validNumber(value)) return null
-  return `AI 점수 ${value.toLocaleString('ko-KR', { maximumFractionDigits: 3 })}`
 }
 
 function formatCacheAgeSec(value: number | null | undefined) {
@@ -158,6 +158,7 @@ export default function RecommendPage() {
   const navigate = useNavigate()
   const [recommendationList, setRecommendationList] = useState<RecommendationList | null>(null)
   const [selectedStocks, setSelectedStocks] = useState<Set<string>>(new Set())
+  const [priceSummaries, setPriceSummaries] = useState<Record<string, StockSummary | null>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -214,6 +215,7 @@ export default function RecommendPage() {
     try {
       const result = await getRecommendations()
       setRecommendationList(result)
+      setPriceSummaries({})
       setSelectedStocks(
         new Set(
           (result.recommendations ?? [])
@@ -224,6 +226,7 @@ export default function RecommendPage() {
     } catch (loadError) {
       setRecommendationList(null)
       setSelectedStocks(new Set())
+      setPriceSummaries({})
       setError(errorMessage(loadError, '추천 종목을 불러오지 못했습니다.'))
     } finally {
       setIsLoading(false)
@@ -255,6 +258,33 @@ export default function RecommendPage() {
     }, 0)
     return () => window.clearTimeout(timer)
   }, [loadRecommendations, loadReadiness])
+
+  useEffect(() => {
+    const codes = Array.from(new Set(recommendations.map((stock) => stockCode(stock).trim()).filter(Boolean)))
+    let isCurrent = true
+
+    const timer = window.setTimeout(() => {
+      setPriceSummaries({})
+      if (codes.length === 0) return
+
+      void Promise.all(
+        codes.map(async (code) => {
+          try {
+            return [code, await getStockSummary(code)] as const
+          } catch {
+            return [code, null] as const
+          }
+        }),
+      ).then((results) => {
+        if (isCurrent) setPriceSummaries(Object.fromEntries(results))
+      })
+    }, 0)
+
+    return () => {
+      isCurrent = false
+      window.clearTimeout(timer)
+    }
+  }, [recommendations])
 
   const toggleStock = (stock: RecommendationInfo) => {
     setSaveError(null)
@@ -418,10 +448,14 @@ export default function RecommendPage() {
             const key = recommendationKey(stock)
             const isSelected = selectedStocks.has(key)
             const detailId = stock.recommendationId
-            const changeRate = formatChangeRate(stock.changeRate)
-            const score = formatScore(stock.score)
+            const code = stockCode(stock).trim()
+            const priceSummary = code ? priceSummaries[code] : null
+            const resolvedPrice = firstValidNumber(stock.currentPrice, priceSummary?.currentPriceKrw)
+            const resolvedChangeRate = firstValidNumber(stock.changeRate, priceSummary?.changeRate)
+            const changeRate = formatChangeRate(resolvedChangeRate)
             const changeColor =
-              validNumber(stock.changeRate) && stock.changeRate < 0 ? 'text-[#3985FF]' : 'text-toss-red'
+              validNumber(resolvedChangeRate) && resolvedChangeRate < 0 ? 'text-[#3985FF]' : 'text-toss-red'
+            const isPriceLoading = Boolean(code && priceSummaries[code] === undefined && !validNumber(stock.currentPrice))
 
             return (
               <div
@@ -448,16 +482,18 @@ export default function RecommendPage() {
                 <div className="ml-4 min-w-0 flex-1">
                   <p className="truncate text-[15px] leading-6 font-medium text-gray-900">{stockName(stock)}</p>
                   <div className="mt-0.5 flex items-center gap-1">
-                    <span className="text-[13px] leading-5 font-normal text-gray-500 tabular-nums">
-                      {formatPrice(stock.currentPrice, stock.currency)}
-                    </span>
+                    {isPriceLoading ? (
+                      <span className="inline-block h-5 w-20 rounded bg-gray-100" aria-label="가격 정보 로딩 중" />
+                    ) : (
+                      <span className="text-[13px] leading-5 font-normal text-gray-500 tabular-nums">
+                        {formatPrice(resolvedPrice, stock.currency || 'KRW')}
+                      </span>
+                    )}
                     {changeRate ? (
                       <span className={`text-[12px] leading-4 font-medium tabular-nums ${changeColor}`}>
                         {changeRate}
                       </span>
-                    ) : (
-                      score && <span className="text-[12px] leading-4 font-medium text-gray-500">{score}</span>
-                    )}
+                    ) : null}
                   </div>
                 </div>
                 <button

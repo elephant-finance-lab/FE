@@ -43,7 +43,6 @@ interface SectionContext {
   price: number | null
   currency: string | null
   rank: number | null | undefined
-  scoreText: string | null
   riskLabel: string | null
 }
 
@@ -89,11 +88,6 @@ function formatPercent(value: number | null | undefined) {
   return `${value > 0 ? '+' : ''}${value.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}%`
 }
 
-function formatScore(value: number | null | undefined) {
-  if (!validNumber(value)) return null
-  return value.toLocaleString('ko-KR', { maximumFractionDigits: 3 })
-}
-
 function formatRiskLevel(level: string | null | undefined) {
   const normalized = String(level ?? '').trim().toLowerCase()
   if (!normalized) return null
@@ -128,8 +122,7 @@ function sectionText(
   if (key === 'recommendReason') {
     const reason = humanizeReason(detail?.recommendReason)
     const rankText = validNumber(context.rank) ? ` 추천 순위는 ${context.rank}위입니다.` : ''
-    const scoreText = context.scoreText ? ` 모델 점수는 ${context.scoreText}입니다.` : ''
-    return `${reason || 'AI 모델 추천 결과가 생성되었습니다.'}${rankText}${scoreText}`.trim()
+    return `${reason || 'AI 모델 추천 결과가 생성되었습니다.'}${rankText}`.trim()
   }
   if (key === 'companySummary') {
     return `${context.stockName}${context.stockCode ? `(${context.stockCode})` : ''}의 기본 정보는 아직 상세 데이터와 연결되지 않았습니다. 현재 화면은 AI 추천 결과와 시세 데이터를 기준으로 표시됩니다.`
@@ -491,7 +484,6 @@ export default function RecommendDetailPage() {
   const resolvedCurrency = visibleDetail?.currency || chart?.currency || 'KRW'
   const changeRateValue = firstValidNumber(visibleDetail?.changeRate, summary?.changeRate)
   const changeRate = formatPercent(changeRateValue)
-  const score = formatScore(visibleDetail?.score)
   const riskLabel = formatRiskLevel(visibleDetail?.riskLevel)
   const context: SectionContext = {
     stockName: displayName(visibleDetail),
@@ -499,7 +491,6 @@ export default function RecommendDetailPage() {
     price: resolvedPrice,
     currency: resolvedCurrency,
     rank: visibleDetail?.rank,
-    scoreText: score,
     riskLabel,
   }
 
@@ -511,15 +502,10 @@ export default function RecommendDetailPage() {
 
       <div className="screen-header pt-4 pb-2">
         <h1 className="section-title">{displayName(visibleDetail)}</h1>
-        <p className="body-copy mt-2">
-          {currentStockCode ? `${currentStockCode} · AI 추천 상세` : 'AI 추천 상세'}
-        </p>
+        {currentStockCode && <p className="body-copy mt-2">{currentStockCode}</p>}
         <div className="mt-3 inline-flex max-w-full items-center gap-2 rounded-[10px] bg-toss-blue-light px-3 py-1.5">
           <span className="shrink-0 text-[13px] leading-5 font-medium text-toss-blue">
             {riskLabel ? `리스크 ${riskLabel}` : '추천 분석'}
-          </span>
-          <span className="min-w-0 truncate text-[12px] leading-5 text-gray-500">
-            {score ? `AI 점수 ${score}` : visibleDetail?.userProfileSummary || '사용자 성향 분석 결과'}
           </span>
         </div>
       </div>
@@ -565,18 +551,6 @@ export default function RecommendDetailPage() {
         {reasonsError && <p className="text-[13px] leading-5 text-gray-500">{reasonsError}</p>}
         <InfoCard title="추천 이유">
           <p>{sectionText(visibleDetail, 'recommendReason', context)}</p>
-        </InfoCard>
-
-        <InfoCard title="기업 정보 요약">
-          <p>{sectionText(visibleDetail, 'companySummary', context)}</p>
-        </InfoCard>
-
-        <InfoCard title="성장성 & 투자 포인트">
-          <p>{sectionText(visibleDetail, 'growthPoint', context)}</p>
-        </InfoCard>
-
-        <InfoCard title="현재 가격 매력도">
-          <p>{sectionText(visibleDetail, 'priceAttractiveness', context)}</p>
         </InfoCard>
 
         <InfoCard title="리스크">
