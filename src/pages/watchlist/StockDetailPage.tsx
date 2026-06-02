@@ -32,6 +32,7 @@ const periods: { label: string; value: StockChartRange }[] = [
   { label: '5년', value: '5Y' },
   { label: '전체', value: 'ALL' },
 ]
+const timeZoneSuffixPattern = /(?:Z|[+-]\d{2}:?\d{2})$/i
 const detailTabs = ['차트', '종목정보'] as const
 const financialPeriods: { label: string; value: StockFinancialPeriod }[] = [
   { label: '분기', value: 'QUARTER' },
@@ -193,7 +194,8 @@ function sliderPosition(current: number | null | undefined, low: number | null, 
 
 function toChartTime(time: string): string | UTCTimestamp {
   if (!time.includes('T')) return time
-  const timestamp = Date.parse(`${time}+09:00`)
+  const normalizedTime = timeZoneSuffixPattern.test(time) ? time : `${time}+09:00`
+  const timestamp = Date.parse(normalizedTime)
   return Number.isFinite(timestamp) ? (Math.floor(timestamp / 1000) as UTCTimestamp) : time.slice(0, 10)
 }
 
@@ -498,14 +500,14 @@ export default function StockDetailPage() {
   }, [periodMenuOpen])
 
   useEffect(() => {
-    if (!ticker) {
-      setChartLoading(false)
-      setChartError(true)
-      return
-    }
     if (activeTab !== '차트') return
     let current = true
     const timer = window.setTimeout(() => {
+      if (!ticker) {
+        setChartLoading(false)
+        setChartError(true)
+        return
+      }
       setChartLoading(true)
       setChartError(false)
       const apiType: StockChartType = chartType === 'area' ? 'LINE' : 'CANDLE'
@@ -530,16 +532,16 @@ export default function StockDetailPage() {
   }, [activePeriod, activeTab, chartType, ticker])
 
   useEffect(() => {
-    if (!ticker) {
-      setInfoLoading(false)
-      setFinancialLoading(false)
-      setInfoError(true)
-      setFinancialError(true)
-      return
-    }
     if (activeTab !== '종목정보') return
     let current = true
     const timer = window.setTimeout(() => {
+      if (!ticker) {
+        setInfoLoading(false)
+        setFinancialLoading(false)
+        setInfoError(true)
+        setFinancialError(true)
+        return
+      }
       setInfo(null)
       setFinancial(null)
       setInfoLoading(true)

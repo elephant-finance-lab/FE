@@ -61,15 +61,15 @@ export default function DailyPricesPage() {
   const [hasError, setHasError] = useState(false)
 
   useEffect(() => {
-    if (!ticker) {
-      setIsLoading(false)
-      setHasError(true)
-      setSummary(null)
-      setRows([])
-      return
-    }
     let current = true
     const timer = window.setTimeout(() => {
+      if (!ticker) {
+        setIsLoading(false)
+        setHasError(true)
+        setSummary(null)
+        setRows([])
+        return
+      }
       setIsLoading(true)
       setHasError(false)
       setSummary(null)
