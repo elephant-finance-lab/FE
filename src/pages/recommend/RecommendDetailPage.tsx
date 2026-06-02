@@ -247,7 +247,7 @@ export default function RecommendDetailPage() {
   const canStartAutoTrading = isPaperAutoTradingReady(readiness)
   const readinessNotice =
     readinessError ||
-    (readiness && !canStartAutoTrading ? autoTradingReadinessMessage(readiness) : null)
+    (canStartAutoTrading ? null : autoTradingReadinessMessage(readiness))
 
   const loadDetail = useCallback(async () => {
     if (recommendationId == null) {

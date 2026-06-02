@@ -12,8 +12,10 @@ const BLOCKED_REASON_LABELS: Record<string, string> = {
 }
 
 export function isPaperAutoTradingReady(readiness: AutoTradingReadiness | null) {
+  if (!readiness) return false
+
   return Boolean(
-    readiness?.canStartPaperAutoTrading &&
+    readiness.canStartPaperAutoTrading &&
       readiness.safeToEnableOrderActions &&
       !readiness.liveTradingAllowed &&
       !readiness.safeToEnableLiveActions,
@@ -28,7 +30,7 @@ export function autoTradingReadinessMessage(readiness: AutoTradingReadiness | nu
   if (reason && BLOCKED_REASON_LABELS[reason]) {
     return BLOCKED_REASON_LABELS[reason]
   }
-  if (!readiness.canStartPaperAutoTrading) {
+  if (!isPaperAutoTradingReady(readiness)) {
     return 'AI 자동매매를 시작할 수 없는 상태입니다.'
   }
   return 'AI 모의 자동매매를 시작할 수 있습니다.'

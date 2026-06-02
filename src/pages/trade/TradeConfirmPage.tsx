@@ -100,7 +100,7 @@ export default function TradeConfirmPage() {
   const canStartAutoTrading = isPaperAutoTradingReady(readiness)
   const readinessNotice =
     readinessError ||
-    (readiness && !canStartAutoTrading ? autoTradingReadinessMessage(readiness) : null)
+    (canStartAutoTrading ? null : autoTradingReadinessMessage(readiness))
 
   useEffect(() => {
     let current = true

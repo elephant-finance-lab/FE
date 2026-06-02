@@ -192,28 +192,33 @@ export default function RecommendPage() {
   const cacheAgeText = formatCacheAgeSec(recommendationList?.cacheAgeSec)
   const readinessNotice =
     readinessError ||
-    (readiness && !canStartAutoTrading ? autoTradingReadinessMessage(readiness) : null)
+    (canStartAutoTrading ? null : autoTradingReadinessMessage(readiness))
 
-  const loadReadiness = useCallback(async () => {
+  const loadReadiness = useCallback(async (isCurrent: () => boolean = () => true) => {
+    if (!isCurrent()) return
     setIsCheckingReadiness(true)
     setReadinessError(null)
     try {
       const result = await getAutoTradingReadiness()
+      if (!isCurrent()) return
       setReadiness(result)
     } catch (loadError) {
+      if (!isCurrent()) return
       setReadiness(null)
       setReadinessError(errorMessage(loadError, 'AI 자동매매 준비 상태를 확인하지 못했습니다.'))
     } finally {
-      setIsCheckingReadiness(false)
+      if (isCurrent()) setIsCheckingReadiness(false)
     }
   }, [])
 
-  const loadRecommendations = useCallback(async () => {
+  const loadRecommendations = useCallback(async (isCurrent: () => boolean = () => true) => {
+    if (!isCurrent()) return
     setIsLoading(true)
     setError(null)
     setSaveError(null)
     try {
       const result = await getRecommendations()
+      if (!isCurrent()) return
       setRecommendationList(result)
       setPriceSummaries({})
       setSelectedStocks(
@@ -224,21 +229,25 @@ export default function RecommendPage() {
         ),
       )
     } catch (loadError) {
+      if (!isCurrent()) return
       setRecommendationList(null)
       setSelectedStocks(new Set())
       setPriceSummaries({})
       setError(errorMessage(loadError, '추천 종목을 불러오지 못했습니다.'))
     } finally {
-      setIsLoading(false)
+      if (isCurrent()) setIsLoading(false)
     }
   }, [])
 
   useEffect(() => {
+    let current = true
     const timer = window.setTimeout(() => {
+      if (!current) return
       setIsCheckingSession(true)
       setSessionError(null)
       void getRunningAutoTradingSession()
         .then((session) => {
+          if (!current) return
           if (session) {
             setActiveSession(session)
             setIsLoading(false)
@@ -246,17 +255,23 @@ export default function RecommendPage() {
             return
           }
           setActiveSession(null)
-          void loadReadiness()
-          return loadRecommendations()
+          void loadReadiness(() => current)
+          return loadRecommendations(() => current)
         })
         .catch((loadError) => {
+          if (!current) return
           setIsLoading(false)
           setIsCheckingReadiness(false)
           setSessionError(errorMessage(loadError, '자동매매 실행 상태를 확인하지 못했습니다.'))
         })
-        .finally(() => setIsCheckingSession(false))
+        .finally(() => {
+          if (current) setIsCheckingSession(false)
+        })
     }, 0)
-    return () => window.clearTimeout(timer)
+    return () => {
+      current = false
+      window.clearTimeout(timer)
+    }
   }, [loadRecommendations, loadReadiness])
 
   useEffect(() => {
