@@ -2,13 +2,17 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   DEFAULT_AUTO_TRADING_SETTINGS,
+  getActiveAutoTradingSessionWithStatus,
   getAutoTradingReadiness,
-  getRunningAutoTradingSession,
   startAutoTradingSession,
   type AutoTradingReadiness,
   type AutoTradingSession,
 } from '../../apis/autoTrading'
-import { getRecommendations, type RecommendationInfo } from '../../apis/recommendations'
+import {
+  getRecommendations,
+  type RecommendationInfo,
+  type RecommendationList,
+} from '../../apis/recommendations'
 import BackButton from '../../components/BackButton'
 import Button from '../../components/Button'
 import { ApiError } from '../../lib/apiClient'
@@ -46,7 +50,10 @@ function toTarget(stock: RecommendationInfo): AutoTradingTarget {
   }
 }
 
-function fromSelectedRecommendations(recommendations: RecommendationInfo[]) {
+function fromSelectedRecommendations(
+  recommendations: RecommendationInfo[],
+  recommendationList: RecommendationList,
+) {
   const selected = recommendations.filter(
     (stock): stock is RecommendationInfo & { recommendationId: number } =>
       Boolean(stock.isSelected) && stock.recommendationId != null,
@@ -57,6 +64,10 @@ function fromSelectedRecommendations(recommendations: RecommendationInfo[]) {
     stockCodes: selected.map(stockCode).filter(Boolean),
     targets: selected.map(toTarget),
     idempotencyKey: createAutoTradingIdempotencyKey(),
+    bundleId:
+      selected.map((stock) => stock.bundleId).find(Boolean) ?? recommendationList.bundleId ?? null,
+    stale: recommendationList.stale === true,
+    staleReason: recommendationList.staleReason,
   } satisfies PendingAutoTradingSelection
 }
 
@@ -97,8 +108,12 @@ export default function TradeConfirmPage() {
   const [isCheckingReadiness, setIsCheckingReadiness] = useState(true)
   const [readinessError, setReadinessError] = useState<string | null>(null)
 
-  const canStartAutoTrading = isPaperAutoTradingReady(readiness)
+  const selectionStaleNotice = selection?.stale
+    ? `추천 데이터가 최신이 아닙니다${selection.staleReason ? `: ${selection.staleReason}` : ''}. 새 추천 갱신 후 자동매매를 시작해주세요.`
+    : null
+  const canStartAutoTrading = isPaperAutoTradingReady(readiness) && !selection?.stale
   const readinessNotice =
+    selectionStaleNotice ||
     readinessError ||
     (canStartAutoTrading ? null : autoTradingReadinessMessage(readiness))
 
@@ -109,14 +124,15 @@ export default function TradeConfirmPage() {
       setLoadError(null)
       void (async () => {
         try {
-          const session = await getRunningAutoTradingSession()
+          const pendingSelection = routeSelection ?? readPendingAutoTradingSelection()
+          const session = await getActiveAutoTradingSessionWithStatus()
           if (!current) return
           if (session) {
             setActiveSession(session)
             setIsCheckingReadiness(false)
           } else {
             try {
-              const readinessResult = await getAutoTradingReadiness()
+              const readinessResult = await getAutoTradingReadiness(pendingSelection?.bundleId ?? null)
               if (!current) return
               setReadiness(readinessResult)
               setReadinessError(null)
@@ -129,10 +145,10 @@ export default function TradeConfirmPage() {
             }
           }
 
-          let nextSelection = routeSelection ?? readPendingAutoTradingSelection()
+          let nextSelection = pendingSelection
           if (!nextSelection) {
             const result = await getRecommendations()
-            nextSelection = fromSelectedRecommendations(result.recommendations ?? [])
+            nextSelection = fromSelectedRecommendations(result.recommendations ?? [], result)
           }
           if (!current) return
           if (nextSelection) {
@@ -161,13 +177,17 @@ export default function TradeConfirmPage() {
     setIsStarting(true)
     setStartError(null)
     try {
-      const currentSession = await getRunningAutoTradingSession()
+      const currentSession = await getActiveAutoTradingSessionWithStatus()
       if (currentSession) {
         setActiveSession(currentSession)
         setStartError('이미 실행 중인 AI 자동매매가 있습니다.')
         return
       }
-      const latestReadiness = await getAutoTradingReadiness()
+      if (selection.stale) {
+        setStartError(selectionStaleNotice ?? '추천 데이터가 최신이 아닙니다. 새 추천 갱신 후 다시 시도해주세요.')
+        return
+      }
+      const latestReadiness = await getAutoTradingReadiness(selection.bundleId)
       setReadiness(latestReadiness)
       setReadinessError(null)
       if (!isPaperAutoTradingReady(latestReadiness)) {
@@ -177,6 +197,7 @@ export default function TradeConfirmPage() {
       const session = await startAutoTradingSession(
         {
           recommendationIds: selection.recommendationIds,
+          bundleId: selection.bundleId,
           ...DEFAULT_AUTO_TRADING_SETTINGS,
         },
         selection.idempotencyKey,

@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   getAutoTradingReadiness,
   getActiveAutoTradingSession,
-  getRunningAutoTradingSession,
+  getActiveAutoTradingSessionWithStatus,
   isActiveAutoTradingStatus,
   stopAutoTradingSession,
   type AutoTradingReadiness,
@@ -188,18 +188,30 @@ export default function RecommendPage() {
     [selectedStockInfo],
   )
   const hasSelectedStocks = selectedRecommendations.length > 0
-  const canStartAutoTrading = isPaperAutoTradingReady(readiness)
   const cacheAgeText = formatCacheAgeSec(recommendationList?.cacheAgeSec)
+  const selectedBundleId = useMemo(
+    () => selectedStockInfo.map((stock) => stock.bundleId).find(Boolean) ?? recommendationList?.bundleId ?? null,
+    [recommendationList?.bundleId, selectedStockInfo],
+  )
+  const isRecommendationStale = recommendationList?.stale === true
+  const staleNotice = isRecommendationStale
+    ? `추천 데이터가 최신이 아닙니다${cacheAgeText ? ` · ${cacheAgeText}` : ''}. 새 추천 갱신 후 자동매매를 시작해주세요.`
+    : null
+  const canStartAutoTrading = isPaperAutoTradingReady(readiness) && !isRecommendationStale
   const readinessNotice =
+    staleNotice ||
     readinessError ||
     (canStartAutoTrading ? null : autoTradingReadinessMessage(readiness))
 
-  const loadReadiness = useCallback(async (isCurrent: () => boolean = () => true) => {
+  const loadReadiness = useCallback(async (
+    isCurrent: () => boolean = () => true,
+    bundleId: string | null = null,
+  ) => {
     if (!isCurrent()) return
     setIsCheckingReadiness(true)
     setReadinessError(null)
     try {
-      const result = await getAutoTradingReadiness()
+      const result = await getAutoTradingReadiness(bundleId)
       if (!isCurrent()) return
       setReadiness(result)
     } catch (loadError) {
@@ -245,7 +257,7 @@ export default function RecommendPage() {
       if (!current) return
       setIsCheckingSession(true)
       setSessionError(null)
-      void getRunningAutoTradingSession()
+      void getActiveAutoTradingSessionWithStatus()
         .then((session) => {
           if (!current) return
           if (session) {
@@ -273,6 +285,18 @@ export default function RecommendPage() {
       window.clearTimeout(timer)
     }
   }, [loadRecommendations, loadReadiness])
+
+  useEffect(() => {
+    if (activeSession || !recommendationList) return
+    let current = true
+    const timer = window.setTimeout(() => {
+      void loadReadiness(() => current, selectedBundleId)
+    }, 0)
+    return () => {
+      current = false
+      window.clearTimeout(timer)
+    }
+  }, [activeSession, loadReadiness, recommendationList, selectedBundleId])
 
   useEffect(() => {
     const codes = Array.from(new Set(recommendations.map((stock) => stockCode(stock).trim()).filter(Boolean)))
@@ -317,13 +341,17 @@ export default function RecommendPage() {
     setIsSaving(true)
     setSaveError(null)
     try {
-      const session = await getRunningAutoTradingSession()
+      const session = await getActiveAutoTradingSessionWithStatus()
       if (session) {
         setActiveSession(session)
         setStopError(null)
         return
       }
-      const latestReadiness = await getAutoTradingReadiness()
+      if (isRecommendationStale) {
+        setSaveError(staleNotice ?? '추천 데이터가 최신이 아닙니다. 새 추천 갱신 후 다시 시도해주세요.')
+        return
+      }
+      const latestReadiness = await getAutoTradingReadiness(selectedBundleId)
       setReadiness(latestReadiness)
       setReadinessError(null)
       if (!isPaperAutoTradingReady(latestReadiness)) {
@@ -340,6 +368,9 @@ export default function RecommendPage() {
         stockCodes: result.stockCodes,
         targets: selectedStockInfo.map(toAutoTradingTarget),
         idempotencyKey: createAutoTradingIdempotencyKey(),
+        bundleId: selectedBundleId,
+        stale: recommendationList?.stale ?? null,
+        staleReason: recommendationList?.staleReason ?? null,
       }
       clearRunningAutoTradingState()
       savePendingAutoTradingSelection(selection)
@@ -562,6 +593,8 @@ export default function RecommendPage() {
             ? '저장 중...'
             : hasSelectedStocks && isCheckingReadiness
               ? '준비 상태 확인 중...'
+              : hasSelectedStocks && isRecommendationStale
+                ? '추천 갱신 대기 중'
               : hasSelectedStocks && !canStartAutoTrading
                 ? '자동매매 준비 중'
                 : '선택 종목 확인하기'}

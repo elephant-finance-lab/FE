@@ -44,6 +44,8 @@ export interface AutoTradingReadiness {
   safeToShowDashboard: boolean
   safeToEnableOrderActions: boolean
   safeToEnableLiveActions: boolean
+  activeSessionExists: boolean
+  activeSessionOwnedByCurrentUser: boolean
   canStartPaperAutoTrading: boolean
   blockedReason: string | null
   detailsJson: string | null
@@ -51,6 +53,7 @@ export interface AutoTradingReadiness {
 
 export interface StartAutoTradingRequest {
   recommendationIds: number[]
+  bundleId?: string | null
   purchaseOptionId: number
   cycles: number
   intervalSec: number
@@ -86,8 +89,9 @@ export function getAutoTradingAiStatus(sessionId: string) {
   )
 }
 
-export function getAutoTradingReadiness() {
-  return apiRequest<AutoTradingReadiness>('/api/auto-trading/sessions/readiness')
+export function getAutoTradingReadiness(bundleId?: string | null) {
+  const query = bundleId ? `?bundleId=${encodeURIComponent(bundleId)}` : ''
+  return apiRequest<AutoTradingReadiness>(`/api/auto-trading/sessions/readiness${query}`)
 }
 
 export async function getRunningAutoTradingSession() {
@@ -100,6 +104,16 @@ export async function getRunningAutoTradingSession() {
   }
 
   return { ...session, status: 'RUNNING' as const }
+}
+
+export async function getActiveAutoTradingSessionWithStatus() {
+  const session = await getActiveAutoTradingSession()
+  if (!session) return null
+  if (!isActiveAutoTradingStatus(session.status)) return session
+
+  const aiStatus = await getAutoTradingAiStatus(session.sessionId)
+  if (!isActiveAutoTradingStatus(aiStatus.sessionStatus)) return null
+  return { ...session, status: aiStatus.sessionStatus }
 }
 
 export async function getAutoTradingSessionWithStatus(sessionId: string) {

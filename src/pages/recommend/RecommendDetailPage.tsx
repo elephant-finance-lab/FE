@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   getAutoTradingReadiness,
-  getRunningAutoTradingSession,
+  getActiveAutoTradingSessionWithStatus,
   type AutoTradingReadiness,
   type AutoTradingSession,
 } from '../../apis/autoTrading'
@@ -50,6 +50,9 @@ const REASON_LABELS: Record<string, string> = {
   MODEL_RANKING_SIGNAL: 'AI 모델이 최근 가격 흐름과 뉴스 점수를 반영해 추천 순위에 포함했습니다.',
   expected_return_unavailable_not_calibrated: '예상 수익률은 아직 보정되지 않아 표시하지 않습니다.',
 }
+
+const MISSING_BUNDLE_READINESS_MESSAGE =
+  '이 추천에는 자동매매 후보 번들 ID가 없어 AI 준비 상태를 확인할 수 없습니다.'
 
 function validNumber(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value)
@@ -235,6 +238,11 @@ export default function RecommendDetailPage() {
 
   const visibleDetail = useMemo(() => mergeRecommendationDetail(detail, reasons), [detail, reasons])
   const currentStockCode = displayCode(visibleDetail, fallbackStockCode).trim()
+  const detailBundleId = visibleDetail?.bundleId?.trim() || null
+  const detailStale = visibleDetail?.stale === true
+  const detailStaleNotice = detailStale
+    ? '추천 데이터가 최신이 아닙니다. 새 추천 갱신 후 자동매매를 시작해주세요.'
+    : null
   const chartData = useMemo(() => lineData(chart), [chart])
   const selectionPayload = useMemo<RecommendationSelectionItem | null>(() => {
     if (visibleDetail?.recommendationId != null) {
@@ -244,8 +252,9 @@ export default function RecommendDetailPage() {
     }
     return currentStockCode ? { stockCode: currentStockCode } : null
   }, [currentStockCode, visibleDetail])
-  const canStartAutoTrading = isPaperAutoTradingReady(readiness)
+  const canStartAutoTrading = isPaperAutoTradingReady(readiness) && !detailStale
   const readinessNotice =
+    detailStaleNotice ||
     readinessError ||
     (canStartAutoTrading ? null : autoTradingReadinessMessage(readiness))
 
@@ -347,7 +356,7 @@ export default function RecommendDetailPage() {
   useEffect(() => {
     let current = true
     const timer = window.setTimeout(() => {
-      void getRunningAutoTradingSession()
+      void getActiveAutoTradingSessionWithStatus()
         .then((session) => {
           if (!current) return
           setActiveSession(session)
@@ -370,9 +379,21 @@ export default function RecommendDetailPage() {
   useEffect(() => {
     let current = true
     const timer = window.setTimeout(() => {
+      if (isLoading) return
+      if (error) {
+        setReadiness(null)
+        setIsCheckingReadiness(false)
+        return
+      }
+      if (!detailBundleId) {
+        setReadiness(null)
+        setReadinessError(MISSING_BUNDLE_READINESS_MESSAGE)
+        setIsCheckingReadiness(false)
+        return
+      }
       setIsCheckingReadiness(true)
       setReadinessError(null)
-      void getAutoTradingReadiness()
+      void getAutoTradingReadiness(detailBundleId)
         .then((result) => {
           if (current) setReadiness(result)
         })
@@ -390,19 +411,27 @@ export default function RecommendDetailPage() {
       current = false
       window.clearTimeout(timer)
     }
-  }, [])
+  }, [detailBundleId, error, isLoading])
 
   const handleSelectForAutoTrading = async () => {
     if (!selectionPayload || isSaving) return
     setIsSaving(true)
     setSaveError(null)
     try {
-      const session = await getRunningAutoTradingSession()
+      const session = await getActiveAutoTradingSessionWithStatus()
       if (session) {
         setActiveSession(session)
         return
       }
-      const latestReadiness = await getAutoTradingReadiness()
+      if (detailStale) {
+        setSaveError(detailStaleNotice ?? '추천 데이터가 최신이 아닙니다. 새 추천 갱신 후 다시 시도해주세요.')
+        return
+      }
+      if (!detailBundleId) {
+        setSaveError(MISSING_BUNDLE_READINESS_MESSAGE)
+        return
+      }
+      const latestReadiness = await getAutoTradingReadiness(detailBundleId)
       setReadiness(latestReadiness)
       setReadinessError(null)
       if (!isPaperAutoTradingReady(latestReadiness)) {
@@ -422,6 +451,9 @@ export default function RecommendDetailPage() {
           },
         ],
         idempotencyKey: createAutoTradingIdempotencyKey(),
+        bundleId: detailBundleId,
+        stale: visibleDetail?.stale ?? null,
+        staleReason: visibleDetail?.staleReason ?? null,
       }
       clearRunningAutoTradingState()
       savePendingAutoTradingSelection(selection)
