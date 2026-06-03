@@ -2,6 +2,7 @@ import type { AutoTradingReadiness } from '../apis/autoTrading'
 
 const BLOCKED_REASON_LABELS: Record<string, string> = {
   readiness_unavailable: 'AI 준비 상태를 확인하지 못했습니다.',
+  ai_readiness_unavailable: 'AI 준비 상태를 확인하지 못했습니다.',
   paper_bundle_id_missing: 'AI 모의 자동매매 번들 ID가 설정되지 않았습니다.',
   deploy_quality_blocked: 'AI 모의 자동매매 모델 검증이 아직 통과되지 않았습니다.',
   broker_evidence_blocked: 'KIS 모의 주문 경로 증거가 아직 준비되지 않았습니다.',

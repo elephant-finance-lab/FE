@@ -165,25 +165,28 @@ export default function PortfolioPage() {
 
   useEffect(() => {
     let ignored = false
-    setSummaryLoading(true)
-    setSummaryError('')
+    const timer = window.setTimeout(() => {
+      setSummaryLoading(true)
+      setSummaryError('')
 
-    void getPortfolioSummary()
-      .then((result) => {
-        if (!ignored) setSummary(result)
-      })
-      .catch(() => {
-        if (!ignored) {
-          setSummary(null)
-          setSummaryError('보유 종목을 불러오지 못했습니다.')
-        }
-      })
-      .finally(() => {
-        if (!ignored) setSummaryLoading(false)
-      })
+      void getPortfolioSummary()
+        .then((result) => {
+          if (!ignored) setSummary(result)
+        })
+        .catch(() => {
+          if (!ignored) {
+            setSummary(null)
+            setSummaryError('보유 종목을 불러오지 못했습니다.')
+          }
+        })
+        .finally(() => {
+          if (!ignored) setSummaryLoading(false)
+        })
+    }, 0)
 
     return () => {
       ignored = true
+      window.clearTimeout(timer)
     }
   }, [])
 
@@ -191,26 +194,29 @@ export default function PortfolioPage() {
     if (activeMainTab !== '내 거래 기록') return
 
     let ignored = false
-    setTradesLoading(true)
-    setTradesError('')
-    setShowAllTrades(false)
+    const timer = window.setTimeout(() => {
+      setTradesLoading(true)
+      setTradesError('')
+      setShowAllTrades(false)
 
-    void getPortfolioTrades(activeTradeTab, selectedPeriod)
-      .then((result) => {
-        if (!ignored) setTrades(result.items ?? result.trades ?? [])
-      })
-      .catch(() => {
-        if (!ignored) {
-          setTrades([])
-          setTradesError('거래 기록을 불러오지 못했습니다.')
-        }
-      })
-      .finally(() => {
-        if (!ignored) setTradesLoading(false)
-      })
+      void getPortfolioTrades(activeTradeTab, selectedPeriod)
+        .then((result) => {
+          if (!ignored) setTrades(result.items ?? result.trades ?? [])
+        })
+        .catch(() => {
+          if (!ignored) {
+            setTrades([])
+            setTradesError('거래 기록을 불러오지 못했습니다.')
+          }
+        })
+        .finally(() => {
+          if (!ignored) setTradesLoading(false)
+        })
+    }, 0)
 
     return () => {
       ignored = true
+      window.clearTimeout(timer)
     }
   }, [activeMainTab, activeTradeTab, selectedPeriod])
 

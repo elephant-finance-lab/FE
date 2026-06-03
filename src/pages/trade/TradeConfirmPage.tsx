@@ -8,7 +8,11 @@ import {
   type AutoTradingReadiness,
   type AutoTradingSession,
 } from '../../apis/autoTrading'
-import { getRecommendations, type RecommendationInfo } from '../../apis/recommendations'
+import {
+  getRecommendations,
+  type RecommendationInfo,
+  type RecommendationList,
+} from '../../apis/recommendations'
 import BackButton from '../../components/BackButton'
 import Button from '../../components/Button'
 import { ApiError } from '../../lib/apiClient'
@@ -46,7 +50,10 @@ function toTarget(stock: RecommendationInfo): AutoTradingTarget {
   }
 }
 
-function fromSelectedRecommendations(recommendations: RecommendationInfo[]) {
+function fromSelectedRecommendations(
+  recommendations: RecommendationInfo[],
+  recommendationList: RecommendationList,
+) {
   const selected = recommendations.filter(
     (stock): stock is RecommendationInfo & { recommendationId: number } =>
       Boolean(stock.isSelected) && stock.recommendationId != null,
@@ -57,9 +64,10 @@ function fromSelectedRecommendations(recommendations: RecommendationInfo[]) {
     stockCodes: selected.map(stockCode).filter(Boolean),
     targets: selected.map(toTarget),
     idempotencyKey: createAutoTradingIdempotencyKey(),
-    bundleId: selected.map((stock) => stock.bundleId).find(Boolean) ?? null,
-    stale: false,
-    staleReason: null,
+    bundleId:
+      selected.map((stock) => stock.bundleId).find(Boolean) ?? recommendationList.bundleId ?? null,
+    stale: recommendationList.stale === true,
+    staleReason: recommendationList.staleReason,
   } satisfies PendingAutoTradingSelection
 }
 
@@ -140,7 +148,7 @@ export default function TradeConfirmPage() {
           let nextSelection = pendingSelection
           if (!nextSelection) {
             const result = await getRecommendations()
-            nextSelection = fromSelectedRecommendations(result.recommendations ?? [])
+            nextSelection = fromSelectedRecommendations(result.recommendations ?? [], result)
           }
           if (!current) return
           if (nextSelection) {

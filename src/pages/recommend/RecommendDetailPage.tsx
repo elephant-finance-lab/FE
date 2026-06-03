@@ -376,6 +376,12 @@ export default function RecommendDetailPage() {
   useEffect(() => {
     let current = true
     const timer = window.setTimeout(() => {
+      if (isLoading) return
+      if (error) {
+        setReadiness(null)
+        setIsCheckingReadiness(false)
+        return
+      }
       setIsCheckingReadiness(true)
       setReadinessError(null)
       void getAutoTradingReadiness(detailBundleId)
@@ -396,7 +402,7 @@ export default function RecommendDetailPage() {
       current = false
       window.clearTimeout(timer)
     }
-  }, [detailBundleId])
+  }, [detailBundleId, error, isLoading])
 
   const handleSelectForAutoTrading = async () => {
     if (!selectionPayload || isSaving) return

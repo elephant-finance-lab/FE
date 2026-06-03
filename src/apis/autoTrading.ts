@@ -112,6 +112,7 @@ export async function getActiveAutoTradingSessionWithStatus() {
   if (!isActiveAutoTradingStatus(session.status)) return session
 
   const aiStatus = await getAutoTradingAiStatus(session.sessionId)
+  if (!isActiveAutoTradingStatus(aiStatus.sessionStatus)) return null
   return { ...session, status: aiStatus.sessionStatus }
 }
 
