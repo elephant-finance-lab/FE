@@ -15,6 +15,9 @@ export interface PendingAutoTradingSelection {
   stockCodes: string[]
   targets: AutoTradingTarget[]
   idempotencyKey: string
+  bundleId: string | null
+  stale: boolean | null
+  staleReason: string | null
 }
 
 export interface RunningAutoTradingState {

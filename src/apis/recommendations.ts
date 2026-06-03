@@ -75,6 +75,9 @@ export interface RecommendationDetail {
   bundleId: string | null
   modelGeneratedAt: string | null
   modelAsof: string | null
+  cacheAgeSec: number | null
+  stale: boolean | null
+  staleReason: string | null
 }
 
 export interface RecommendationSelectionItem {
