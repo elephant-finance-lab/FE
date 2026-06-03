@@ -28,6 +28,7 @@ import {
   autoTradingReadinessMessage,
   isPaperAutoTradingReady,
 } from '../../lib/autoTradingReadiness'
+import { recommendationStaleNotice } from '../../lib/recommendationStatus'
 
 interface TradeConfirmRouteState {
   selection?: PendingAutoTradingSelection
@@ -108,9 +109,11 @@ export default function TradeConfirmPage() {
   const [isCheckingReadiness, setIsCheckingReadiness] = useState(true)
   const [readinessError, setReadinessError] = useState<string | null>(null)
 
-  const selectionStaleNotice = selection?.stale
-    ? `추천 데이터가 최신이 아닙니다${selection.staleReason ? `: ${selection.staleReason}` : ''}. 새 추천 갱신 후 자동매매를 시작해주세요.`
-    : null
+  const selectionStaleNotice = recommendationStaleNotice({
+    stale: selection?.stale === true,
+    staleReason: selection?.staleReason,
+    cacheAgeText: null,
+  })
   const canStartAutoTrading = isPaperAutoTradingReady(readiness) && !selection?.stale
   const readinessNotice =
     selectionStaleNotice ||

@@ -61,8 +61,8 @@ export interface StartAutoTradingRequest {
 
 export const DEFAULT_AUTO_TRADING_SETTINGS = {
   purchaseOptionId: 2,
-  cycles: 3,
-  intervalSec: 10,
+  cycles: 10,
+  intervalSec: 60,
 } as const
 
 export function isActiveAutoTradingStatus(status: AutoTradingSessionStatus | undefined) {

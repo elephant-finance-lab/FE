@@ -75,7 +75,7 @@ function IndexQuote({ name, index }: { name: 'KOSPI' | 'KOSDAQ'; index: MarketIn
           </p>
         </>
       ) : (
-        <p className="mt-1 text-[12px] leading-6 text-gray-400">데이터 없음</p>
+        <p className="mt-1 text-[12px] leading-5 text-gray-400">장외 또는 지수 데이터 준비 중</p>
       )}
     </div>
   )

@@ -28,6 +28,10 @@ import {
   autoTradingReadinessMessage,
   isPaperAutoTradingReady,
 } from '../../lib/autoTradingReadiness'
+import {
+  formatCacheAgeSec,
+  recommendationStaleNotice,
+} from '../../lib/recommendationStatus'
 
 interface RecommendRouteState {
   stockCode?: string
@@ -240,9 +244,12 @@ export default function RecommendDetailPage() {
   const currentStockCode = displayCode(visibleDetail, fallbackStockCode).trim()
   const detailBundleId = visibleDetail?.bundleId?.trim() || null
   const detailStale = visibleDetail?.stale === true
-  const detailStaleNotice = detailStale
-    ? '추천 데이터가 최신이 아닙니다. 새 추천 갱신 후 자동매매를 시작해주세요.'
-    : null
+  const detailCacheAgeText = formatCacheAgeSec(visibleDetail?.cacheAgeSec)
+  const detailStaleNotice = recommendationStaleNotice({
+    stale: detailStale,
+    staleReason: visibleDetail?.staleReason,
+    cacheAgeText: detailCacheAgeText,
+  })
   const chartData = useMemo(() => lineData(chart), [chart])
   const selectionPayload = useMemo<RecommendationSelectionItem | null>(() => {
     if (visibleDetail?.recommendationId != null) {
@@ -540,6 +547,11 @@ export default function RecommendDetailPage() {
             {riskLabel ? `리스크 ${riskLabel}` : '추천 분석'}
           </span>
         </div>
+        {detailStaleNotice && (
+          <div className="mt-3 rounded-[10px] bg-gray-50 px-3 py-2">
+            <p className="text-[12px] leading-5 text-gray-500">{detailStaleNotice}</p>
+          </div>
+        )}
       </div>
 
       <div className="screen-px mt-4 mb-2">
