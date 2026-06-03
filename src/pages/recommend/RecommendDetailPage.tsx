@@ -51,6 +51,9 @@ const REASON_LABELS: Record<string, string> = {
   expected_return_unavailable_not_calibrated: '예상 수익률은 아직 보정되지 않아 표시하지 않습니다.',
 }
 
+const MISSING_BUNDLE_READINESS_MESSAGE =
+  '이 추천에는 자동매매 후보 번들 ID가 없어 AI 준비 상태를 확인할 수 없습니다.'
+
 function validNumber(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value)
 }
@@ -235,7 +238,7 @@ export default function RecommendDetailPage() {
 
   const visibleDetail = useMemo(() => mergeRecommendationDetail(detail, reasons), [detail, reasons])
   const currentStockCode = displayCode(visibleDetail, fallbackStockCode).trim()
-  const detailBundleId = visibleDetail?.bundleId ?? null
+  const detailBundleId = visibleDetail?.bundleId?.trim() || null
   const detailStale = visibleDetail?.stale === true
   const detailStaleNotice = detailStale
     ? '추천 데이터가 최신이 아닙니다. 새 추천 갱신 후 자동매매를 시작해주세요.'
@@ -382,6 +385,12 @@ export default function RecommendDetailPage() {
         setIsCheckingReadiness(false)
         return
       }
+      if (!detailBundleId) {
+        setReadiness(null)
+        setReadinessError(MISSING_BUNDLE_READINESS_MESSAGE)
+        setIsCheckingReadiness(false)
+        return
+      }
       setIsCheckingReadiness(true)
       setReadinessError(null)
       void getAutoTradingReadiness(detailBundleId)
@@ -416,6 +425,10 @@ export default function RecommendDetailPage() {
       }
       if (detailStale) {
         setSaveError(detailStaleNotice ?? '추천 데이터가 최신이 아닙니다. 새 추천 갱신 후 다시 시도해주세요.')
+        return
+      }
+      if (!detailBundleId) {
+        setSaveError(MISSING_BUNDLE_READINESS_MESSAGE)
         return
       }
       const latestReadiness = await getAutoTradingReadiness(detailBundleId)
