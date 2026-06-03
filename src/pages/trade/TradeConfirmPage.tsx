@@ -307,8 +307,7 @@ export default function TradeConfirmPage() {
             isStarting ||
             isCheckingReadiness ||
             Boolean(readinessError) ||
-            !canStartAutoTrading ||
-            Boolean(selection?.stale)
+            !canStartAutoTrading
           }
         >
           {isStarting

@@ -584,10 +584,9 @@ export default function RecommendPage() {
             Boolean(activeSession) ||
             isCheckingReadiness ||
             Boolean(readinessError) ||
-            !canStartAutoTrading ||
-            isRecommendationStale
+            !canStartAutoTrading
           }
-          variant={hasSelectedStocks && canStartAutoTrading && !isRecommendationStale ? 'primary' : 'secondary'}
+          variant={hasSelectedStocks && canStartAutoTrading ? 'primary' : 'secondary'}
           className="disabled:opacity-100"
         >
           {isSaving
