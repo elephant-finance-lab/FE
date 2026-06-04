@@ -48,7 +48,7 @@ export function recommendationStaleNotice({
 
 export function recommendationUnavailableMessage(error: unknown, fallback: string) {
   if (error instanceof ApiError) {
-    const message = error.message.toLowerCase()
+    const message = (error.message ?? '').toLowerCase()
     if (error.code === 'AI504_01' || error.status === 504 || message.includes('deadline')) {
       return 'AI 추천 계산 응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.'
     }
