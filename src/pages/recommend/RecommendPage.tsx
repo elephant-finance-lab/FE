@@ -32,6 +32,12 @@ import {
   autoTradingReadinessMessage,
   isPaperAutoTradingReady,
 } from '../../lib/autoTradingReadiness'
+import {
+  formatCacheAgeSec,
+  recommendationStaleNotice,
+  recommendationStaleSummary,
+  recommendationUnavailableMessage,
+} from '../../lib/recommendationStatus'
 
 function validNumber(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value)
@@ -88,13 +94,6 @@ function formatPrice(value: number | null | undefined, currency: string | null |
 function formatChangeRate(value: number | null | undefined) {
   if (!validNumber(value)) return null
   return `${value > 0 ? '+' : ''}${value.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}%`
-}
-
-function formatCacheAgeSec(value: number | null | undefined) {
-  if (!validNumber(value)) return null
-  if (value < 60) return `${Math.floor(value)}초 전`
-  if (value < 3600) return `${Math.floor(value / 60)}분 전`
-  return `${Math.floor(value / 3600)}시간 전`
 }
 
 function SkeletonRow() {
@@ -194,9 +193,12 @@ export default function RecommendPage() {
     [recommendationList?.bundleId, selectedStockInfo],
   )
   const isRecommendationStale = recommendationList?.stale === true
-  const staleNotice = isRecommendationStale
-    ? `추천 데이터가 최신이 아닙니다${cacheAgeText ? ` · ${cacheAgeText}` : ''}. 새 추천 갱신 후 자동매매를 시작해주세요.`
-    : null
+  const staleNotice = recommendationStaleNotice({
+    stale: isRecommendationStale,
+    staleReason: recommendationList?.staleReason,
+    cacheAgeText,
+  })
+  const staleSummary = recommendationStaleSummary(recommendationList?.staleReason, cacheAgeText)
   const canStartAutoTrading = isPaperAutoTradingReady(readiness) && !isRecommendationStale
   const readinessNotice =
     staleNotice ||
@@ -245,7 +247,7 @@ export default function RecommendPage() {
       setRecommendationList(null)
       setSelectedStocks(new Set())
       setPriceSummaries({})
-      setError(errorMessage(loadError, '추천 종목을 불러오지 못했습니다.'))
+      setError(recommendationUnavailableMessage(loadError, '추천 종목을 불러오지 못했습니다.'))
     } finally {
       if (isCurrent()) setIsLoading(false)
     }
@@ -433,7 +435,7 @@ export default function RecommendPage() {
         {recommendationList?.stale && (
           <div className="mt-3 rounded-[10px] bg-gray-50 px-3 py-2">
             <p className="text-[12px] leading-5 text-gray-500">
-              최근 추천 갱신을 기다리는 중입니다{cacheAgeText ? ` · ${cacheAgeText}` : ''}.
+              최신 추천 갱신을 기다리는 중입니다: {staleSummary}. 자동매매 시작은 최신 추천에서만 가능합니다.
             </p>
           </div>
         )}
@@ -464,7 +466,7 @@ export default function RecommendPage() {
 
         {!isCheckingSession && !sessionError && !activeSession && !isLoading && error && (
           <div className="rounded-[15px] bg-gray-50 px-5 py-6">
-            <p className="text-[15px] leading-6 text-gray-900">추천 종목을 불러오지 못했습니다</p>
+            <p className="text-[15px] leading-6 text-gray-900">추천을 표시할 수 없습니다</p>
             <p className="mt-1 text-[13px] leading-5 text-gray-500">{error}</p>
             <button
               type="button"
@@ -480,7 +482,7 @@ export default function RecommendPage() {
           <div className="rounded-[15px] bg-gray-50 px-5 py-8 text-center">
             <p className="text-[15px] leading-6 text-gray-900">추천 종목이 없습니다</p>
             <p className="mt-1 text-[13px] leading-5 text-gray-500">
-              AI 모델 추천 결과가 준비되면 이곳에 표시됩니다
+              장중 추천 캐시가 생성되면 이곳에 표시됩니다
             </p>
           </div>
         )}

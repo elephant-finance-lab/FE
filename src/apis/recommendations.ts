@@ -78,6 +78,9 @@ export interface RecommendationDetail {
   cacheAgeSec: number | null
   stale: boolean | null
   staleReason: string | null
+  advisoryOnly: boolean | null
+  safeToEnableOrderActions: boolean | null
+  liveTradingAllowed: boolean | null
 }
 
 export interface RecommendationSelectionItem {
