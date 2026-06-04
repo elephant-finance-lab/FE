@@ -47,6 +47,54 @@ function firstValidNumber(...values: Array<number | null | undefined>) {
   return values.find(validNumber) ?? null
 }
 
+const PRICE_SUMMARY_CONCURRENCY = 2
+const PRICE_SUMMARY_RETRY_COUNT = 2
+const PRICE_SUMMARY_RETRY_DELAY_MS = 450
+
+function delay(ms: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+}
+
+async function getStockSummaryWithRetry(code: string) {
+  let lastError: unknown = null
+  for (let attempt = 0; attempt <= PRICE_SUMMARY_RETRY_COUNT; attempt += 1) {
+    try {
+      return await getStockSummary(code)
+    } catch (error) {
+      lastError = error
+      if (attempt < PRICE_SUMMARY_RETRY_COUNT) {
+        await delay(PRICE_SUMMARY_RETRY_DELAY_MS * (attempt + 1))
+      }
+    }
+  }
+  throw lastError
+}
+
+async function getPriceSummaries(codes: string[]) {
+  const results: Array<readonly [string, StockSummary | null]> = []
+  let cursor = 0
+
+  async function worker() {
+    while (cursor < codes.length) {
+      const code = codes[cursor]
+      cursor += 1
+      try {
+        results.push([code, await getStockSummaryWithRetry(code)] as const)
+      } catch {
+        results.push([code, null] as const)
+      }
+      await delay(PRICE_SUMMARY_RETRY_DELAY_MS)
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(PRICE_SUMMARY_CONCURRENCY, codes.length) }, () => worker()),
+  )
+  return Object.fromEntries(results)
+}
+
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
 }
@@ -308,16 +356,8 @@ export default function RecommendPage() {
       setPriceSummaries({})
       if (codes.length === 0) return
 
-      void Promise.all(
-        codes.map(async (code) => {
-          try {
-            return [code, await getStockSummary(code)] as const
-          } catch {
-            return [code, null] as const
-          }
-        }),
-      ).then((results) => {
-        if (isCurrent) setPriceSummaries(Object.fromEntries(results))
+      void getPriceSummaries(codes).then((results) => {
+        if (isCurrent) setPriceSummaries(results)
       })
     }, 0)
 
