@@ -133,6 +133,37 @@ input, button, textarea, select {
   to { opacity: 1; }
 }
 
+@keyframes recommendationElephantFloat {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  50% { transform: translateY(-7px) rotate(1deg); }
+}
+
+@keyframes recommendationChartDraw {
+  0% { stroke-dashoffset: 210; opacity: 0.3; }
+  45% { opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0.9; }
+}
+
+@keyframes recommendationScan {
+  0% { transform: translateX(-24px); opacity: 0.55; }
+  100% { transform: translateX(138px); opacity: 0.9; }
+}
+
+@keyframes recommendationSpark {
+  0%, 100% { transform: translateY(0) scale(0.92); opacity: 0.58; }
+  50% { transform: translateY(-8px) scale(1.06); opacity: 1; }
+}
+
+@keyframes recommendationDot {
+  0%, 100% { transform: translateY(0); opacity: 0.35; }
+  50% { transform: translateY(-4px); opacity: 1; }
+}
+
+@keyframes recommendationProgress {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(330%); }
+}
+
 .animate-fade-in-up {
   animation: fadeInUp 0.4s ease-out;
 }
@@ -147,4 +178,45 @@ input, button, textarea, select {
 
 .animate-fade-in {
   animation: fadeIn 0.2s ease-out;
+}
+
+.recommendation-loading-elephant {
+  animation: recommendationElephantFloat 2.6s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.recommendation-loading-chart {
+  animation: recommendationChartDraw 2.2s ease-in-out infinite alternate;
+  stroke-dasharray: 210;
+}
+
+.recommendation-loading-scan {
+  animation: recommendationScan 2.8s ease-in-out infinite alternate;
+}
+
+.recommendation-loading-spark {
+  animation: recommendationSpark 1.9s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.recommendation-loading-dot {
+  animation: recommendationDot 1.15s ease-in-out infinite;
+}
+
+.recommendation-loading-progress {
+  animation: recommendationProgress 1.65s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recommendation-loading-elephant,
+  .recommendation-loading-chart,
+  .recommendation-loading-scan,
+  .recommendation-loading-spark,
+  .recommendation-loading-dot,
+  .recommendation-loading-progress {
+    animation-duration: 1ms;
+    animation-iteration-count: 1;
+  }
 }

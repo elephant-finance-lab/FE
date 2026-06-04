@@ -47,6 +47,61 @@ function firstValidNumber(...values: Array<number | null | undefined>) {
   return values.find(validNumber) ?? null
 }
 
+const PRICE_SUMMARY_CONCURRENCY = 2
+const PRICE_SUMMARY_RETRY_COUNT = 2
+const PRICE_SUMMARY_RETRY_DELAY_MS = 450
+type IsCurrent = () => boolean
+
+function delay(ms: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+}
+
+async function getStockSummaryWithRetry(code: string, isCurrent: IsCurrent = () => true) {
+  let lastError: unknown = null
+  for (let attempt = 0; attempt <= PRICE_SUMMARY_RETRY_COUNT; attempt += 1) {
+    if (!isCurrent()) return null
+    try {
+      return await getStockSummary(code)
+    } catch (error) {
+      lastError = error
+      if (attempt < PRICE_SUMMARY_RETRY_COUNT) {
+        await delay(PRICE_SUMMARY_RETRY_DELAY_MS * (attempt + 1))
+        if (!isCurrent()) return null
+      }
+    }
+  }
+  throw lastError
+}
+
+async function getPriceSummaries(codes: string[], isCurrent: IsCurrent = () => true) {
+  const results: Array<readonly [string, StockSummary | null]> = []
+  let cursor = 0
+
+  async function worker() {
+    while (isCurrent() && cursor < codes.length) {
+      const code = codes[cursor]
+      cursor += 1
+      try {
+        const summary = await getStockSummaryWithRetry(code, isCurrent)
+        if (!isCurrent()) return
+        results.push([code, summary] as const)
+      } catch {
+        if (!isCurrent()) return
+        results.push([code, null] as const)
+      }
+      if (!isCurrent()) return
+      await delay(PRICE_SUMMARY_RETRY_DELAY_MS)
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(PRICE_SUMMARY_CONCURRENCY, codes.length) }, () => worker()),
+  )
+  return Object.fromEntries(results)
+}
+
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
 }
@@ -96,15 +151,88 @@ function formatChangeRate(value: number | null | undefined) {
   return `${value > 0 ? '+' : ''}${value.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}%`
 }
 
-function SkeletonRow() {
+function RecommendationLoading() {
   return (
-    <div className="flex items-center py-3.5" aria-hidden="true">
-      <div className="h-5 w-7 rounded bg-gray-100" />
-      <div className="ml-4 flex-1">
-        <div className="h-5 w-28 rounded bg-gray-100" />
-        <div className="mt-2 h-4 w-40 rounded bg-gray-100" />
+    <div
+      role="status"
+      aria-live="polite"
+      className="relative min-h-[360px] overflow-hidden rounded-[18px] bg-[#F8FBFF] px-5 pt-8 pb-7 text-center"
+    >
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-linear-to-b from-toss-blue-light to-transparent" />
+      <div className="relative mx-auto h-[178px] w-full max-w-[260px]" aria-hidden="true">
+        <svg viewBox="0 0 260 178" className="h-full w-full" fill="none">
+          <path d="M24 136H236" stroke="#DDEAFF" strokeWidth="2" strokeLinecap="round" />
+          <path d="M32 120H228" stroke="#EAF2FF" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="4 8" />
+          <path d="M32 90H228" stroke="#EAF2FF" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="4 8" />
+          <path d="M32 60H228" stroke="#EAF2FF" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="4 8" />
+
+          <path
+            d="M34 129C48 121 60 126 72 111C84 96 96 107 109 96C124 83 137 91 151 75C164 60 177 70 193 54C204 43 215 48 227 40"
+            className="recommendation-loading-chart"
+            stroke="#34C759"
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <g className="recommendation-loading-scan">
+            <rect x="48" y="34" width="36" height="106" rx="18" fill="#3182F6" opacity="0.08" />
+            <path d="M66 38V137" stroke="#3182F6" strokeWidth="2" strokeLinecap="round" opacity="0.24" />
+          </g>
+
+          <g className="recommendation-loading-spark" style={{ animationDelay: '0ms' }}>
+            <circle cx="204" cy="46" r="11" fill="#FFD66B" />
+            <path d="M204 39V53M198 46H210" stroke="#9B7414" strokeWidth="2" strokeLinecap="round" />
+          </g>
+          <g className="recommendation-loading-spark" style={{ animationDelay: '260ms' }}>
+            <circle cx="54" cy="124" r="8" fill="#DDF8E7" />
+            <path d="M50 124L53 127L59 120" stroke="#34C759" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </g>
+          <g className="recommendation-loading-spark" style={{ animationDelay: '520ms' }}>
+            <circle cx="184" cy="73" r="7" fill="#E8F3FF" />
+            <path d="M181 73L184 76L189 69" stroke="#3182F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </g>
+
+          <g className="recommendation-loading-elephant">
+            <ellipse cx="126" cy="116" rx="46" ry="30" fill="#3182F6" />
+            <circle cx="83" cy="104" r="27" fill="#3182F6" />
+            <ellipse cx="64" cy="104" rx="17" ry="21" fill="#8BBFFF" />
+            <ellipse cx="101" cy="104" rx="15" ry="19" fill="#7AB5FF" />
+            <circle cx="75" cy="98" r="3.2" fill="white" />
+            <circle cx="76" cy="99" r="1.5" fill="#191F28" />
+            <path
+              d="M76 112C76 129 56 131 56 118C56 113 61 112 64 116"
+              stroke="#2272EB"
+              strokeWidth="9"
+              strokeLinecap="round"
+            />
+            <path d="M100 141V124M132 142V126M156 139V124" stroke="#2272EB" strokeWidth="11" strokeLinecap="round" />
+            <path d="M158 97C170 100 177 107 181 118" stroke="#2272EB" strokeWidth="8" strokeLinecap="round" />
+            <circle cx="57" cy="118" r="12" fill="white" stroke="#191F28" strokeWidth="3" />
+            <path d="M66 127L76 137" stroke="#191F28" strokeWidth="4" strokeLinecap="round" />
+          </g>
+        </svg>
       </div>
-      <div className="h-9 w-9 rounded bg-gray-100" />
+
+      <p className="mt-2 text-[13px] font-medium leading-5 text-toss-blue">AI 추천 생성 중</p>
+      <h2 className="mt-2 text-[20px] font-semibold leading-7 text-gray-900">
+        코끼리 연구원이 종목을 살펴보고 있어요
+      </h2>
+      <p className="mx-auto mt-3 max-w-[260px] text-[14px] leading-6 text-gray-500">
+        모델 분석 결과가 도착하는 대로 맞춤 추천 목록을 보여드릴게요.
+      </p>
+
+      <div className="mt-6 flex items-center justify-center gap-1.5" aria-hidden="true">
+        {[0, 1, 2].map((index) => (
+          <span
+            key={index}
+            className="recommendation-loading-dot h-2 w-2 rounded-full bg-toss-blue"
+            style={{ animationDelay: `${index * 180}ms` }}
+          />
+        ))}
+      </div>
+      <div className="mx-auto mt-5 h-1.5 w-full max-w-[220px] overflow-hidden rounded-full bg-white shadow-[inset_0_0_0_1px_rgba(49,130,246,0.08)]" aria-hidden="true">
+        <div className="recommendation-loading-progress h-full w-1/3 rounded-full bg-toss-blue" />
+      </div>
     </div>
   )
 }
@@ -308,16 +436,8 @@ export default function RecommendPage() {
       setPriceSummaries({})
       if (codes.length === 0) return
 
-      void Promise.all(
-        codes.map(async (code) => {
-          try {
-            return [code, await getStockSummary(code)] as const
-          } catch {
-            return [code, null] as const
-          }
-        }),
-      ).then((results) => {
-        if (isCurrent) setPriceSummaries(Object.fromEntries(results))
+      void getPriceSummaries(codes, () => isCurrent).then((results) => {
+        if (isCurrent) setPriceSummaries(results)
       })
     }, 0)
 
@@ -444,9 +564,7 @@ export default function RecommendPage() {
       <div className="px-6">
         {(isCheckingSession || isLoading) && (
           <div aria-label="추천 종목 로딩 중">
-            {Array.from({ length: 6 }, (_, index) => (
-              <SkeletonRow key={index} />
-            ))}
+            <RecommendationLoading />
           </div>
         )}
 

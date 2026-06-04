@@ -57,6 +57,16 @@ const REASON_LABELS: Record<string, string> = {
 
 const MISSING_BUNDLE_READINESS_MESSAGE =
   '이 추천에는 자동매매 후보 번들 ID가 없어 AI 준비 상태를 확인할 수 없습니다.'
+const DETAIL_SUMMARY_RETRY_COUNT = 2
+const DETAIL_CHART_RETRY_COUNT = 2
+const DETAIL_RETRY_DELAY_MS = 650
+type IsCurrent = () => boolean
+
+function delay(ms: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+}
 
 function validNumber(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value)
@@ -64,6 +74,40 @@ function validNumber(value: number | null | undefined): value is number {
 
 function firstValidNumber(...values: Array<number | null | undefined>) {
   return values.find(validNumber) ?? null
+}
+
+async function getStockSummaryWithRetry(ticker: string, isCurrent: IsCurrent = () => true) {
+  let lastError: unknown = null
+  for (let attempt = 0; attempt <= DETAIL_SUMMARY_RETRY_COUNT; attempt += 1) {
+    if (!isCurrent()) return null
+    try {
+      return await getStockSummary(ticker)
+    } catch (error) {
+      lastError = error
+      if (attempt < DETAIL_SUMMARY_RETRY_COUNT) {
+        await delay(DETAIL_RETRY_DELAY_MS * (attempt + 1))
+        if (!isCurrent()) return null
+      }
+    }
+  }
+  throw lastError
+}
+
+async function getStockChartWithRetry(ticker: string, isCurrent: IsCurrent = () => true) {
+  let lastError: unknown = null
+  for (let attempt = 0; attempt <= DETAIL_CHART_RETRY_COUNT; attempt += 1) {
+    if (!isCurrent()) return null
+    try {
+      return await getStockChart(ticker, '3M', 'LINE')
+    } catch (error) {
+      lastError = error
+      if (attempt < DETAIL_CHART_RETRY_COUNT) {
+        await delay(DETAIL_RETRY_DELAY_MS * (attempt + 1))
+        if (!isCurrent()) return null
+      }
+    }
+  }
+  throw lastError
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -316,10 +360,12 @@ export default function RecommendDetailPage() {
 
       setChartLoading(true)
       setChartError(false)
-      void getStockChart(currentStockCode, '3M', 'LINE')
-        .then((result) => {
-          if (current) setChart(result)
-        })
+      void (async () => {
+        await delay(DETAIL_RETRY_DELAY_MS)
+        if (!current) return
+        const result = await getStockChartWithRetry(currentStockCode, () => current)
+        if (current) setChart(result)
+      })()
         .catch(() => {
           if (current) {
             setChart(null)
@@ -345,7 +391,7 @@ export default function RecommendDetailPage() {
         return
       }
 
-      void getStockSummary(currentStockCode)
+      void getStockSummaryWithRetry(currentStockCode, () => current)
         .then((result) => {
           if (current) setSummary(result)
         })
