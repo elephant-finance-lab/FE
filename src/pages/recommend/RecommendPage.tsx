@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import {
   getAutoTradingReadiness,
-  getActiveAutoTradingSession,
   getActiveAutoTradingSessionWithStatus,
   isActiveAutoTradingStatus,
   stopAutoTradingSession,
@@ -12,10 +11,8 @@ import {
 } from '../../apis/autoTrading'
 import {
   getRecommendations,
-  selectRecommendations,
   type RecommendationInfo,
   type RecommendationList,
-  type RecommendationSelectionItem,
 } from '../../apis/recommendations'
 import { getStockSummary, type StockSummary } from '../../apis/stocks'
 import Button from '../../components/Button'
@@ -50,6 +47,8 @@ function firstValidNumber(...values: Array<number | null | undefined>) {
 const PRICE_SUMMARY_CONCURRENCY = 2
 const PRICE_SUMMARY_RETRY_COUNT = 2
 const PRICE_SUMMARY_RETRY_DELAY_MS = 450
+const STOP_STATUS_POLL_ATTEMPTS = 12
+const STOP_STATUS_POLL_INTERVAL_MS = 750
 type IsCurrent = () => boolean
 
 function delay(ms: number) {
@@ -102,6 +101,21 @@ async function getPriceSummaries(codes: string[], isCurrent: IsCurrent = () => t
   return Object.fromEntries(results)
 }
 
+async function waitForStoppedAutoTradingSession() {
+  let latestSession: AutoTradingSession | null = null
+
+  for (let attempt = 0; attempt < STOP_STATUS_POLL_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) await delay(STOP_STATUS_POLL_INTERVAL_MS)
+
+    latestSession = await getActiveAutoTradingSessionWithStatus()
+    if (!latestSession || !isActiveAutoTradingStatus(latestSession.status)) {
+      return null
+    }
+  }
+
+  return latestSession
+}
+
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
 }
@@ -117,18 +131,6 @@ function stockCode(stock: RecommendationInfo) {
 function recommendationKey(stock: RecommendationInfo) {
   const code = stockCode(stock)
   return String(stock.recommendationId ?? (code || stock.modelRecommendationId || stockName(stock)))
-}
-
-function toSelectionItem(stock: RecommendationInfo): RecommendationSelectionItem | null {
-  const code = stockCode(stock)
-  if (stock.recommendationId != null) {
-    return code ? { recommendationId: stock.recommendationId, stockCode: code } : { recommendationId: stock.recommendationId }
-  }
-  return code ? { stockCode: code } : null
-}
-
-function isSelectionItem(value: RecommendationSelectionItem | null): value is RecommendationSelectionItem {
-  return value !== null
 }
 
 function toAutoTradingTarget(stock: RecommendationInfo): AutoTradingTarget {
@@ -263,8 +265,8 @@ function ActiveSessionModal({
           AI 자동매매가 실행 중입니다
         </h2>
         <p className="mt-3 text-[14px] leading-6 text-gray-600">
-          새 추천 종목을 선택하려면 현재 실행 중인 자동매매를 중단해야 합니다. 자동매매를
-          중단하고 다시 선택하시겠습니까?
+          새 추천 종목으로 다시 시작하려면 현재 실행 중인 자동매매를 중단해야 합니다. 자동매매를
+          중단하고 다시 확인하시겠습니까?
         </p>
         {error && <p className="mt-3 text-[13px] leading-5 text-error">{error}</p>}
         <div className="mt-6 flex flex-col gap-3">
@@ -272,7 +274,7 @@ function ActiveSessionModal({
             계속 실행하기
           </Button>
           <Button onClick={onStop} disabled={isStopping}>
-            {isStopping ? '중단 요청 중...' : '중단하고 다시 선택하기'}
+            {isStopping ? '중단 요청 중...' : '중단하고 다시 확인하기'}
           </Button>
         </div>
       </div>
@@ -284,7 +286,6 @@ function ActiveSessionModal({
 export default function RecommendPage() {
   const navigate = useNavigate()
   const [recommendationList, setRecommendationList] = useState<RecommendationList | null>(null)
-  const [selectedStocks, setSelectedStocks] = useState<Set<string>>(new Set())
   const [priceSummaries, setPriceSummaries] = useState<Record<string, StockSummary | null>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -303,22 +304,22 @@ export default function RecommendPage() {
     () => recommendationList?.recommendations ?? [],
     [recommendationList],
   )
-  const selectedStockInfo = useMemo(
-    () => recommendations.filter((stock) => selectedStocks.has(recommendationKey(stock))),
-    [recommendations, selectedStocks],
-  )
-  const selectedRecommendations = useMemo(
+  const autoTradingStockInfo = useMemo(
     () =>
-      selectedStockInfo
-        .map(toSelectionItem)
-        .filter(isSelectionItem),
-    [selectedStockInfo],
+      recommendations.filter(
+        (stock): stock is RecommendationInfo & { recommendationId: number } =>
+          stock.recommendationId != null,
+      ),
+    [recommendations],
   )
-  const hasSelectedStocks = selectedRecommendations.length > 0
+  const hasAutoTradingTargets = autoTradingStockInfo.length > 0
   const cacheAgeText = formatCacheAgeSec(recommendationList?.cacheAgeSec)
   const selectedBundleId = useMemo(
-    () => selectedStockInfo.map((stock) => stock.bundleId).find(Boolean) ?? recommendationList?.bundleId ?? null,
-    [recommendationList?.bundleId, selectedStockInfo],
+    () =>
+      autoTradingStockInfo.map((stock) => stock.bundleId).find(Boolean) ??
+      recommendationList?.bundleId ??
+      null,
+    [autoTradingStockInfo, recommendationList?.bundleId],
   )
   const isRecommendationStale = recommendationList?.stale === true
   const staleNotice = recommendationStaleNotice({
@@ -363,17 +364,9 @@ export default function RecommendPage() {
       if (!isCurrent()) return
       setRecommendationList(result)
       setPriceSummaries({})
-      setSelectedStocks(
-        new Set(
-          (result.recommendations ?? [])
-            .filter((stock) => stock.isSelected)
-            .map(recommendationKey),
-        ),
-      )
     } catch (loadError) {
       if (!isCurrent()) return
       setRecommendationList(null)
-      setSelectedStocks(new Set())
       setPriceSummaries({})
       setError(recommendationUnavailableMessage(loadError, '추천 종목을 불러오지 못했습니다.'))
     } finally {
@@ -447,19 +440,8 @@ export default function RecommendPage() {
     }
   }, [recommendations])
 
-  const toggleStock = (stock: RecommendationInfo) => {
-    setSaveError(null)
-    setSelectedStocks((prev) => {
-      const key = recommendationKey(stock)
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
-  }
-
   const handleConfirmSelection = async () => {
-    if (!hasSelectedStocks || isSaving) return
+    if (!hasAutoTradingTargets || isSaving) return
     setIsSaving(true)
     setSaveError(null)
     try {
@@ -480,15 +462,10 @@ export default function RecommendPage() {
         setSaveError(autoTradingReadinessMessage(latestReadiness))
         return
       }
-      const payload =
-        selectedRecommendations.length === 1
-          ? selectedRecommendations[0]
-          : { selectedRecommendations }
-      const result = await selectRecommendations(payload)
       const selection = {
-        recommendationIds: result.recommendationIds,
-        stockCodes: result.stockCodes,
-        targets: selectedStockInfo.map(toAutoTradingTarget),
+        recommendationIds: autoTradingStockInfo.map((stock) => stock.recommendationId),
+        stockCodes: autoTradingStockInfo.map(stockCode).filter(Boolean),
+        targets: autoTradingStockInfo.map(toAutoTradingTarget),
         idempotencyKey: createAutoTradingIdempotencyKey(),
         bundleId: selectedBundleId,
         stale: recommendationList?.stale ?? null,
@@ -498,23 +475,34 @@ export default function RecommendPage() {
       savePendingAutoTradingSelection(selection)
       navigate('/trade/confirm', { state: { selection } })
     } catch (selectError) {
-      setSaveError(errorMessage(selectError, '선택한 추천 종목을 저장하지 못했습니다.'))
+      setSaveError(errorMessage(selectError, '추천 종목을 확인하지 못했습니다.'))
     } finally {
       setIsSaving(false)
     }
   }
 
-  const handleContinueSession = () => {
+  const handleContinueSession = async () => {
     if (!activeSession) return
+    const latestSession = await getActiveAutoTradingSessionWithStatus().catch(() => activeSession)
+    if (!latestSession || !isActiveAutoTradingStatus(latestSession.status)) {
+      clearPendingAutoTradingSelection()
+      clearRunningAutoTradingState()
+      setActiveSession(null)
+      setStopError(null)
+      void loadReadiness()
+      void loadRecommendations()
+      return
+    }
+
     const storedSession = readRunningAutoTradingState()
     saveRunningAutoTradingState({
-      session: activeSession,
+      session: latestSession,
       selection:
-        storedSession?.session.sessionId === activeSession.sessionId
+        storedSession?.session.sessionId === latestSession.sessionId
           ? storedSession.selection
           : null,
     })
-    navigate('/trade/complete', { state: { session: activeSession, started: false } })
+    navigate('/trade/complete', { state: { session: latestSession, started: false } })
   }
 
   const handleStopSession = async () => {
@@ -523,15 +511,16 @@ export default function RecommendPage() {
     setStopError(null)
     try {
       await stopAutoTradingSession(activeSession.sessionId)
-      const activeSessionAfterStop = await getActiveAutoTradingSession()
+      const activeSessionAfterStop = await waitForStoppedAutoTradingSession()
       if (isActiveAutoTradingStatus(activeSessionAfterStop?.status)) {
         setActiveSession(activeSessionAfterStop)
-        setStopError('자동매매 중단 요청을 처리 중입니다. 중단된 뒤 다시 선택해주세요.')
+        setStopError('자동매매 중단 요청을 처리 중입니다. 잠시 후 다시 확인해주세요.')
         return
       }
       clearPendingAutoTradingSelection()
       clearRunningAutoTradingState()
       setActiveSession(null)
+      setStopError(null)
       await loadReadiness()
       await loadRecommendations()
     } catch (stopRequestError) {
@@ -612,7 +601,6 @@ export default function RecommendPage() {
           !error &&
           recommendations.map((stock, idx) => {
             const key = recommendationKey(stock)
-            const isSelected = selectedStocks.has(key)
             const detailId = stock.recommendationId
             const code = stockCode(stock).trim()
             const priceSummary = code ? priceSummaries[code] : null
@@ -662,29 +650,6 @@ export default function RecommendPage() {
                     ) : null}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    toggleStock(stock)
-                  }}
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center transition-colors ${
-                    isSelected ? 'text-toss-blue' : 'text-[#D9D9D9]'
-                  }`}
-                  aria-label={isSelected ? '선택 해제' : '선택'}
-                  aria-pressed={isSelected}
-                >
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <rect x="4" y="4" width="16" height="16" stroke="currentColor" strokeWidth="2.4" />
-                    <path
-                      d="M8 12.2l2.8 2.8L16.5 9"
-                      stroke="currentColor"
-                      strokeWidth="2.6"
-                      strokeLinecap="square"
-                      strokeLinejoin="miter"
-                    />
-                  </svg>
-                </button>
               </div>
             )
           })}
@@ -698,7 +663,7 @@ export default function RecommendPage() {
         <Button
           onClick={() => void handleConfirmSelection()}
           disabled={
-            !hasSelectedStocks ||
+            !hasAutoTradingTargets ||
             isSaving ||
             isCheckingSession ||
             Boolean(activeSession) ||
@@ -706,25 +671,25 @@ export default function RecommendPage() {
             Boolean(readinessError) ||
             !canStartAutoTrading
           }
-          variant={hasSelectedStocks && canStartAutoTrading ? 'primary' : 'secondary'}
+          variant={hasAutoTradingTargets && canStartAutoTrading ? 'primary' : 'secondary'}
           className="disabled:opacity-100"
         >
           {isSaving
-            ? '저장 중...'
-            : hasSelectedStocks && isCheckingReadiness
+            ? '확인 중...'
+            : hasAutoTradingTargets && isCheckingReadiness
               ? '준비 상태 확인 중...'
-              : hasSelectedStocks && isRecommendationStale
+              : hasAutoTradingTargets && isRecommendationStale
                 ? '추천 갱신 대기 중'
-              : hasSelectedStocks && !canStartAutoTrading
+              : hasAutoTradingTargets && !canStartAutoTrading
                 ? '자동매매 준비 중'
-                : '선택 종목 확인하기'}
+                : '추천 전체 확인하기'}
         </Button>
       </div>
       {activeSession && (
         <ActiveSessionModal
           error={stopError}
           isStopping={isStopping}
-          onContinue={handleContinueSession}
+          onContinue={() => void handleContinueSession()}
           onStop={() => void handleStopSession()}
         />
       )}

@@ -10,20 +10,13 @@ import {
 import {
   getRecommendationDetail,
   getRecommendationReasons,
-  selectRecommendations,
   type RecommendationDetail,
-  type RecommendationSelectionItem,
 } from '../../apis/recommendations'
 import { getStockChart, getStockSummary, type StockChart, type StockSummary } from '../../apis/stocks'
 import BackButton from '../../components/BackButton'
 import Button from '../../components/Button'
 import InfoCard from '../../components/InfoCard'
 import StockChartComponent from '../../components/StockChart'
-import {
-  clearRunningAutoTradingState,
-  createAutoTradingIdempotencyKey,
-  savePendingAutoTradingSelection,
-} from '../../lib/autoTradingStorage'
 import {
   autoTradingReadinessMessage,
   isPaperAutoTradingReady,
@@ -295,14 +288,6 @@ export default function RecommendDetailPage() {
     cacheAgeText: detailCacheAgeText,
   })
   const chartData = useMemo(() => lineData(chart), [chart])
-  const selectionPayload = useMemo<RecommendationSelectionItem | null>(() => {
-    if (visibleDetail?.recommendationId != null) {
-      return currentStockCode
-        ? { recommendationId: visibleDetail.recommendationId, stockCode: currentStockCode }
-        : { recommendationId: visibleDetail.recommendationId }
-    }
-    return currentStockCode ? { stockCode: currentStockCode } : null
-  }, [currentStockCode, visibleDetail])
   const canStartAutoTrading = isPaperAutoTradingReady(readiness) && !detailStale
   const readinessNotice =
     detailStaleNotice ||
@@ -466,8 +451,8 @@ export default function RecommendDetailPage() {
     }
   }, [detailBundleId, error, isLoading])
 
-  const handleSelectForAutoTrading = async () => {
-    if (!selectionPayload || isSaving) return
+  const handleReviewAutoTrading = async () => {
+    if (isSaving) return
     setIsSaving(true)
     setSaveError(null)
     try {
@@ -491,28 +476,9 @@ export default function RecommendDetailPage() {
         setSaveError(autoTradingReadinessMessage(latestReadiness))
         return
       }
-      const result = await selectRecommendations(selectionPayload)
-      const selection = {
-        recommendationIds: result.recommendationIds,
-        stockCodes: result.stockCodes,
-        targets: [
-          {
-            recommendationId: visibleDetail?.recommendationId ?? null,
-            stockName: displayName(visibleDetail),
-            stockCode: currentStockCode,
-            riskLevel: visibleDetail?.riskLevel ?? null,
-          },
-        ],
-        idempotencyKey: createAutoTradingIdempotencyKey(),
-        bundleId: detailBundleId,
-        stale: visibleDetail?.stale ?? null,
-        staleReason: visibleDetail?.staleReason ?? null,
-      }
-      clearRunningAutoTradingState()
-      savePendingAutoTradingSelection(selection)
-      navigate('/trade/confirm', { state: { selection } })
+      navigate('/trade/confirm')
     } catch (selectError) {
-      setSaveError(errorMessage(selectError, '추천 종목 선택을 저장하지 못했습니다.'))
+      setSaveError(errorMessage(selectError, '추천 전체 확인 화면으로 이동하지 못했습니다.'))
     } finally {
       setIsSaving(false)
     }
@@ -652,7 +618,7 @@ export default function RecommendDetailPage() {
         {activeSession && (
           <div className="mb-4 rounded-[15px] bg-toss-blue-light px-5 py-4">
             <p className="text-[14px] leading-6 text-gray-700">
-              현재 AI 자동매매가 실행 중입니다. 새 종목을 선택하려면 추천 탭에서 기존 세션을
+              현재 AI 자동매매가 실행 중입니다. 추천 전체로 다시 시작하려면 추천 탭에서 기존 세션을
               먼저 중단해주세요.
             </p>
             <button
@@ -670,9 +636,8 @@ export default function RecommendDetailPage() {
         )}
         {saveError && <p className="mb-3 text-[13px] leading-5 text-error">{saveError}</p>}
         <Button
-          onClick={() => void handleSelectForAutoTrading()}
+          onClick={() => void handleReviewAutoTrading()}
           disabled={
-            !selectionPayload ||
             isSaving ||
             isCheckingSession ||
             Boolean(activeSession) ||
@@ -683,14 +648,14 @@ export default function RecommendDetailPage() {
           }
         >
           {isSaving
-            ? '저장 중...'
+            ? '확인 중...'
             : activeSession
               ? 'AI 자동매매 실행 중'
               : isCheckingReadiness
                 ? '준비 상태 확인 중...'
                 : !canStartAutoTrading
                   ? '자동매매 준비 중'
-                  : '자동매매 대상으로 선택하기'}
+                  : '추천 전체 확인하기'}
         </Button>
       </div>
     </div>
