@@ -8,6 +8,7 @@ import {
   type StockFinancialStatement,
 } from '../../apis/stocks'
 import BackButton from '../../components/BackButton'
+import { isTickerEcho, resolveStockDisplayName } from '../../lib/stockDisplay'
 
 const financialTabs: { label: string; value: StockFinancialStatement }[] = [
   { label: '손익계산서', value: 'INCOME' },
@@ -166,21 +167,21 @@ export default function FinancialsPage() {
       setHasError(false)
       setFinancial(null)
       void (async () => {
-        let stockName = navigationName ?? null
+        let stockName = navigationName && !isTickerEcho(navigationName, ticker) ? navigationName : null
         if (!navigationName && current) {
           setSummaryName(null)
         }
         if (!stockName) {
           try {
             const summary = await getStockSummary(ticker)
-            stockName = summary.stockName
+            stockName = resolveStockDisplayName(ticker, summary.stockName)
             if (current) setSummaryName({ ticker, name: summary.stockName })
           } catch {
             if (current) setSummaryName(null)
           }
         }
 
-        if (stockName && mayLackCorporateFinancials(stockName)) {
+        if (stockName && !isTickerEcho(stockName, ticker) && mayLackCorporateFinancials(stockName)) {
           if (current) setIsLoading(false)
           return
         }
@@ -203,7 +204,7 @@ export default function FinancialsPage() {
 
   const selectedPeriod = financialPeriods.find((item) => item.value === period)?.label ?? '분기'
   const resolvedSummaryName = summaryName?.ticker === ticker ? summaryName.name : null
-  const displayName = financial?.nameKor ?? navigationName ?? resolvedSummaryName ?? ticker
+  const displayName = resolveStockDisplayName(ticker, financial?.nameKor, navigationName, resolvedSummaryName)
   const isFundLikeProduct = mayLackCorporateFinancials(displayName)
 
   return (
