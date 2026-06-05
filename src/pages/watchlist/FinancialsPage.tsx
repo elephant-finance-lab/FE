@@ -205,7 +205,7 @@ export default function FinancialsPage() {
   const selectedPeriod = financialPeriods.find((item) => item.value === period)?.label ?? '분기'
   const resolvedSummaryName = summaryName?.ticker === ticker ? summaryName.name : null
   const displayName = resolveStockDisplayName(ticker, financial?.nameKor, navigationName, resolvedSummaryName)
-  const isFundLikeProduct = mayLackCorporateFinancials(displayName)
+  const isFundLikeProduct = !isTickerEcho(displayName, ticker) && mayLackCorporateFinancials(displayName)
 
   return (
     <div className="screen pb-10">

@@ -441,7 +441,7 @@ export default function StockDetailPage() {
   const periodMenuRef = useRef<HTMLDivElement | null>(null)
   const cachedDisplayName = resolvedDisplayName?.ticker === ticker ? resolvedDisplayName.name : null
   const displayName = resolveStockDisplayName(ticker, summary?.stockName, navigationName, info?.nameKor, cachedDisplayName)
-  const isFundLikeProduct = mayLackCorporateFinancials(displayName)
+  const isFundLikeProduct = !isTickerEcho(displayName, ticker) && mayLackCorporateFinancials(displayName)
 
   const rememberDisplayName = useCallback(
     (candidate: string | null | undefined) => {
