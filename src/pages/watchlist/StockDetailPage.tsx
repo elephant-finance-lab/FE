@@ -23,6 +23,7 @@ import {
 import BackButton from '../../components/BackButton'
 import StockChartComponent from '../../components/StockChart'
 import { ApiError } from '../../lib/apiClient'
+import { isTickerEcho, resolveStockDisplayName } from '../../lib/stockDisplay'
 
 const periods: { label: string; value: StockChartRange }[] = [
   { label: '1일', value: '1D' },
@@ -418,7 +419,6 @@ export default function StockDetailPage() {
   const { id } = useParams()
   const ticker = (id ?? '').trim().toUpperCase()
   const navigationName = (location.state as { stockName?: string } | null)?.stockName?.trim()
-  const fallbackName = navigationName || ticker
   const [summary, setSummary] = useState<StockSummary | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(true)
   const [summaryError, setSummaryError] = useState(false)
@@ -436,9 +436,22 @@ export default function StockDetailPage() {
   const [financial, setFinancial] = useState<StockFinancial | null>(null)
   const [financialLoading, setFinancialLoading] = useState(false)
   const [financialError, setFinancialError] = useState(false)
+  const [resolvedDisplayName, setResolvedDisplayName] = useState<{ ticker: string; name: string } | null>(null)
   const [periodMenuOpen, setPeriodMenuOpen] = useState(false)
   const periodMenuRef = useRef<HTMLDivElement | null>(null)
-  const isFundLikeProduct = mayLackCorporateFinancials(summary?.stockName ?? fallbackName)
+  const cachedDisplayName = resolvedDisplayName?.ticker === ticker ? resolvedDisplayName.name : null
+  const displayName = resolveStockDisplayName(ticker, summary?.stockName, navigationName, info?.nameKor, cachedDisplayName)
+  const isFundLikeProduct = !isTickerEcho(displayName, ticker) && mayLackCorporateFinancials(displayName)
+
+  const rememberDisplayName = useCallback(
+    (candidate: string | null | undefined) => {
+      const name = candidate?.trim()
+      if (name && !isTickerEcho(name, ticker)) {
+        setResolvedDisplayName({ ticker, name })
+      }
+    },
+    [setResolvedDisplayName, ticker],
+  )
 
   const loadSummary = useCallback(async () => {
     if (!ticker) {
@@ -452,14 +465,16 @@ export default function StockDetailPage() {
     setSummaryErrorCode(null)
     setSummary(null)
     try {
-      setSummary(await getStockSummary(ticker))
+      const nextSummary = await getStockSummary(ticker)
+      setSummary(nextSummary)
+      rememberDisplayName(nextSummary.stockName)
     } catch (error) {
       setSummaryError(true)
       setSummaryErrorCode(error instanceof ApiError ? (error.code ?? null) : null)
     } finally {
       setSummaryLoading(false)
     }
-  }, [ticker])
+  }, [rememberDisplayName, setSummary, setSummaryError, setSummaryErrorCode, setSummaryLoading, ticker])
 
   const loadFinancial = async () => {
     if (!ticker) return
@@ -550,7 +565,10 @@ export default function StockDetailPage() {
       setFinancialError(false)
       void getStockInfo(ticker, financialPeriod)
         .then((nextInfo) => {
-          if (current) setInfo(nextInfo)
+          if (current) {
+            setInfo(nextInfo)
+            rememberDisplayName(nextInfo.nameKor)
+          }
         })
         .catch(() => {
           if (current) setInfoError(true)
@@ -581,7 +599,7 @@ export default function StockDetailPage() {
       current = false
       window.clearTimeout(timer)
     }
-  }, [activeTab, financialPeriod, isFundLikeProduct, ticker])
+  }, [activeTab, financialPeriod, isFundLikeProduct, rememberDisplayName, ticker])
 
   useEffect(() => {
     if (!ticker) return
@@ -595,6 +613,7 @@ export default function StockDetailPage() {
           const update = parseSummaryUpdate(message.body)
           if (update && update.ticker === ticker) {
             setSummary(update)
+            rememberDisplayName(update.stockName)
             setSummaryError(false)
             setSummaryLoading(false)
           }
@@ -613,7 +632,7 @@ export default function StockDetailPage() {
     return () => {
       void client.deactivate()
     }
-  }, [ticker])
+  }, [rememberDisplayName, ticker])
 
   const linePoints = useMemo(() => lineData(chart), [chart])
   const candlePoints = useMemo(() => candlestickData(chart), [chart])
@@ -643,7 +662,7 @@ export default function StockDetailPage() {
           <>
             <div className="flex items-start gap-2">
               <h1 className="min-w-0 flex-1 text-[24px] font-semibold leading-8 text-gray-900 overflow-hidden text-ellipsis [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical]">
-                {summary?.stockName ?? fallbackName}
+                {displayName}
               </h1>
               <div className="mt-1 flex shrink-0 items-center gap-1 px-2.5 h-[22px] rounded-full bg-gray-100 text-gray-500">
                 <span className="text-[11px] font-medium">{summary?.ticker ?? ticker}</span>
@@ -763,7 +782,7 @@ export default function StockDetailPage() {
               type="button"
               onClick={() =>
                 navigate(`/stock/${encodeURIComponent(ticker)}/daily-prices`, {
-                  state: { stockName: summary?.stockName ?? fallbackName },
+                  state: { stockName: displayName },
                 })
               }
               className="flex items-center gap-2 text-[14px] text-gray-600 font-medium"
@@ -830,7 +849,7 @@ export default function StockDetailPage() {
                 type="button"
                 onClick={() =>
                   navigate(`/stock/${encodeURIComponent(ticker)}/daily-prices`, {
-                    state: { stockName: summary?.stockName ?? fallbackName },
+                    state: { stockName: displayName },
                   })
                 }
                 className="flex items-center gap-1.5 text-[13px] leading-5 font-normal text-gray-500"
@@ -911,7 +930,7 @@ export default function StockDetailPage() {
                 type="button"
                 onClick={() =>
                   navigate(`/stock/${encodeURIComponent(ticker)}/financials`, {
-                    state: { stockName: summary?.stockName ?? fallbackName },
+                    state: { stockName: displayName },
                   })
                 }
                 className="flex items-center gap-1.5 text-[13px] leading-5 font-normal text-gray-500"

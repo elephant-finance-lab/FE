@@ -15,6 +15,7 @@ import {
   type WatchlistGroup,
   type WatchlistItem,
 } from '../../apis/watchlist'
+import { resolveStockDisplayName } from '../../lib/stockDisplay'
 
 type ModalState = 'closed' | 'edit' | 'confirm-delete'
 
@@ -432,25 +433,32 @@ export default function WatchlistPage() {
               const summary = summaries[item.ticker]
               const hasSummary = Boolean(summary)
               const isPositive = (summary?.changeRate ?? 0) >= 0
+              const displayName = resolveStockDisplayName(item.ticker, summary?.stockName)
 
               return (
                 <div
                   key={item.itemId}
                   role="button"
                   tabIndex={0}
-                  onClick={() => navigate(`/stock/${encodeURIComponent(item.ticker)}`)}
+                  onClick={() =>
+                    navigate(`/stock/${encodeURIComponent(item.ticker)}`, {
+                      state: { stockName: displayName },
+                    })
+                  }
                   onKeyDown={(e) => {
                     if (e.target !== e.currentTarget) return
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
-                      navigate(`/stock/${encodeURIComponent(item.ticker)}`)
+                      navigate(`/stock/${encodeURIComponent(item.ticker)}`, {
+                        state: { stockName: displayName },
+                      })
                     }
                   }}
                   className="flex items-center gap-3 cursor-pointer"
                 >
                   <div className="flex-1 flex flex-col gap-1 min-w-0">
                     <span className="text-[15px] font-semibold leading-6 text-gray-900 truncate">
-                      {summary?.stockName ?? item.ticker}
+                      {displayName}
                     </span>
                     {isSummariesLoading && !summary ? (
                       <div className="flex items-center gap-2">

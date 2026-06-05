@@ -6,6 +6,7 @@ import {
   type StockDailyPriceItem,
   type StockSummary,
 } from '../../apis/stocks'
+import { resolveStockDisplayName } from '../../lib/stockDisplay'
 
 function validNumber(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value)
@@ -59,6 +60,7 @@ export default function DailyPricesPage() {
   const [rows, setRows] = useState<StockDailyPriceItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
+  const displayName = resolveStockDisplayName(ticker, summary?.stockName, navigationName)
 
   useEffect(() => {
     let current = true
@@ -120,7 +122,7 @@ export default function DailyPricesPage() {
         </button>
 
         <div className="flex flex-col items-center">
-          <span className="text-[12px] leading-4 text-gray-400">{summary?.stockName ?? navigationName ?? ticker}</span>
+          <span className="text-[12px] leading-4 text-gray-400">{displayName}</span>
           {summary && (
             <span className={`text-[14px] leading-5 font-medium tabular-nums ${rateColor(summary.changeRate)}`}>
               {formatPrice(summary.currentPriceKrw)} {formatRate(summary.changeRate)}
