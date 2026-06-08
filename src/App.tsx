@@ -23,7 +23,6 @@ import AccountLinkPage from './pages/mypage/AccountLinkPage'
 import AnalyzingPage from './pages/trade/AnalyzingPage'
 import TradeConfirmPage from './pages/trade/TradeConfirmPage'
 import TradeCompletePage from './pages/trade/TradeCompletePage'
-import NotificationPage from './pages/notification/NotificationPage'
 import { AuthProvider } from './contexts/AuthProvider'
 import RequireAuth from './routes/RequireAuth'
 
@@ -54,7 +53,6 @@ const router = createBrowserRouter([
   { path: '/stock/:id/daily-prices', element: <DailyPricesPage /> },
   { path: '/recommend/analyzing', element: protectedElement(<AnalyzingPage />) },
   { path: '/recommend/:id', element: protectedElement(<RecommendDetailPage />) },
-  { path: '/notification', element: protectedElement(<NotificationPage />) },
   { path: '/trade/analyzing', element: protectedElement(<AnalyzingPage />) },
   { path: '/trade/amount', element: <Navigate to="/trade/confirm" replace /> },
   { path: '/trade/confirm', element: protectedElement(<TradeConfirmPage />) },
