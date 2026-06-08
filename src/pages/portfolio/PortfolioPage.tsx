@@ -237,7 +237,7 @@ export default function PortfolioPage() {
   return (
     <div className="pb-10">
       <div className="px-6 pt-6 pb-2 border-b border-gray-100">
-        <div className="flex items-start justify-between">
+        <div className="flex items-start">
           <div className="flex gap-4">
             {mainTabs.map((tab) => (
               <button
@@ -252,16 +252,6 @@ export default function PortfolioPage() {
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={() => navigate('/notification')}
-            className="-mt-1 w-9 h-9 flex items-center justify-center rounded-full text-gray-400 active:bg-gray-50 transition-colors"
-            aria-label="알림"
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
-            </svg>
-          </button>
         </div>
       </div>
 
