@@ -51,22 +51,22 @@ function toTarget(stock: RecommendationInfo): AutoTradingTarget {
   }
 }
 
-function fromRecommendedStocks(
+function fromSelectedRecommendations(
   recommendations: RecommendationInfo[],
   recommendationList: RecommendationList,
 ) {
-  const targets = recommendations.filter(
+  const selected = recommendations.filter(
     (stock): stock is RecommendationInfo & { recommendationId: number } =>
-      stock.recommendationId != null,
+      Boolean(stock.isSelected) && stock.recommendationId != null,
   )
-  if (targets.length === 0) return null
+  if (selected.length === 0) return null
   return {
-    recommendationIds: targets.map((stock) => stock.recommendationId),
-    stockCodes: targets.map(stockCode).filter(Boolean),
-    targets: targets.map(toTarget),
+    recommendationIds: selected.map((stock) => stock.recommendationId),
+    stockCodes: selected.map(stockCode).filter(Boolean),
+    targets: selected.map(toTarget),
     idempotencyKey: createAutoTradingIdempotencyKey(),
     bundleId:
-      targets.map((stock) => stock.bundleId).find(Boolean) ?? recommendationList.bundleId ?? null,
+      selected.map((stock) => stock.bundleId).find(Boolean) ?? recommendationList.bundleId ?? null,
     stale: recommendationList.stale === true,
     staleReason: recommendationList.staleReason,
   } satisfies PendingAutoTradingSelection
@@ -134,18 +134,8 @@ export default function TradeConfirmPage() {
             setActiveSession(session)
             setIsCheckingReadiness(false)
           } else {
-            let nextSelection = pendingSelection
-            if (!nextSelection) {
-              const result = await getRecommendations()
-              nextSelection = fromRecommendedStocks(result.recommendations ?? [], result)
-            }
-            if (!current) return
-            if (nextSelection) {
-              savePendingAutoTradingSelection(nextSelection)
-            }
-            setSelection(nextSelection)
             try {
-              const readinessResult = await getAutoTradingReadiness(nextSelection?.bundleId ?? null)
+              const readinessResult = await getAutoTradingReadiness(pendingSelection?.bundleId ?? null)
               if (!current) return
               setReadiness(readinessResult)
               setReadinessError(null)
@@ -157,9 +147,20 @@ export default function TradeConfirmPage() {
               if (current) setIsCheckingReadiness(false)
             }
           }
+
+          let nextSelection = pendingSelection
+          if (!nextSelection) {
+            const result = await getRecommendations()
+            nextSelection = fromSelectedRecommendations(result.recommendations ?? [], result)
+          }
+          if (!current) return
+          if (nextSelection) {
+            savePendingAutoTradingSelection(nextSelection)
+          }
+          setSelection(nextSelection)
         } catch (error) {
           if (current) {
-            setLoadError(error instanceof Error ? error.message : '추천 종목을 불러오지 못했습니다.')
+            setLoadError(error instanceof Error ? error.message : '선택된 종목을 불러오지 못했습니다.')
             setIsCheckingReadiness(false)
           }
         } finally {
@@ -217,15 +218,15 @@ export default function TradeConfirmPage() {
   }
 
   return (
-    <div className="screen flex flex-col pb-6">
+    <div className="screen flex flex-col pb-10">
       <div className="px-6 pt-[52px]">
         <BackButton />
       </div>
 
-      <div className="flex-1 screen-px pt-4 pb-2">
-        <h1 className="section-title">추천 종목으로 AI 자동매매를 시작할까요?</h1>
+      <div className="flex-1 screen-px pt-4">
+        <h1 className="section-title">선택한 종목으로 AI 자동매매를 시작할까요?</h1>
         <p className="body-copy mt-3">
-          AI가 자동매매 대상 추천 종목을 기준으로 매수·매도 타이밍을 판단합니다.
+          AI가 선택된 추천 종목을 기준으로 매수·매도 타이밍을 판단합니다.
         </p>
 
         {isLoading && (
@@ -237,20 +238,20 @@ export default function TradeConfirmPage() {
 
         {!isLoading && loadError && (
           <div className="mt-8 rounded-[15px] bg-gray-50 p-5">
-            <p className="text-[15px] leading-6 text-gray-900">추천 종목을 확인하지 못했습니다</p>
+            <p className="text-[15px] leading-6 text-gray-900">선택 종목을 확인하지 못했습니다</p>
             <p className="mt-1 text-[13px] leading-5 text-gray-500">{loadError}</p>
           </div>
         )}
 
         {!isLoading && !loadError && (!selection || selection.targets.length === 0) && (
           <div className="mt-8 rounded-[15px] bg-gray-50 p-5">
-            <p className="text-[15px] leading-6 text-gray-900">자동매매 대상 추천 종목이 없습니다.</p>
+            <p className="text-[15px] leading-6 text-gray-900">선택된 종목이 없습니다.</p>
             <button
               type="button"
               onClick={() => navigate('/recommend', { replace: true })}
               className="mt-3 text-[13px] font-medium leading-5 text-toss-blue"
             >
-              추천 종목 불러오기
+              추천 종목 선택하기
             </button>
           </div>
         )}
@@ -258,11 +259,11 @@ export default function TradeConfirmPage() {
         {!isLoading && !loadError && selection && selection.targets.length > 0 && (
           <div className="mt-8 rounded-[15px] bg-gray-50 p-5">
             <h2 className="text-[15px] font-medium leading-6 text-gray-900">자동매매 대상 종목</h2>
-            <div className="mt-4 space-y-4">
+            <div className="mt-3 space-y-3">
               {selection.targets.map((target) => (
                 <div
                   key={`${target.recommendationId ?? target.stockCode}-${target.stockCode}`}
-                  className="rounded-[12px] bg-white p-5"
+                  className="rounded-[12px] bg-white p-4"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <p className="min-w-0 truncate text-[15px] font-medium leading-6 text-gray-900">
@@ -291,13 +292,13 @@ export default function TradeConfirmPage() {
           </div>
         )}
 
-        <div className="mt-8 space-y-2 text-[13px] leading-6 text-gray-400">
+        <div className="mt-5 space-y-1 text-[13px] leading-5 text-gray-400">
           <p>자동매매는 시장 상황과 모델 판단에 따라 체결되지 않을 수 있습니다.</p>
           <p>체결 내역은 실행 이후 포트폴리오에서 확인할 수 있습니다.</p>
         </div>
       </div>
 
-      <div className="screen-px mt-8 flex flex-col gap-4 pb-[calc(24px+env(safe-area-inset-bottom))]">
+      <div className="screen-px flex flex-col gap-3">
         {startError && <p className="text-[13px] leading-5 text-error">{startError}</p>}
         <Button
           onClick={() => void handleStart()}
